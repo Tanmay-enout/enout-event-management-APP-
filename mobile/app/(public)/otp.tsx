@@ -57,9 +57,9 @@ export default function OtpScreen() {
       }
     } catch (error) {
       console.error('OTP Screen: Error in onSubmit:', error);
-      // For dev mode, if API fails, still try to navigate with dev credentials
-      if (email === DEV_CONFIG.DEV_EMAIL && data.code === DEV_CONFIG.DEV_OTP) {
-        console.log('DEV MODE: Navigating despite error - using dev credentials');
+      // For dev mode, if API fails, still try to navigate with any email and fixed OTP
+      if (DEV_CONFIG.DEV_AUTH_ENABLED && data.code === DEV_CONFIG.DEV_OTP) {
+        console.log('DEV MODE: Navigating despite error - using any email with fixed OTP');
         router.push('/invite'); // Navigate to invite screen as fallback
       } else {
         if (error instanceof Error) {
@@ -128,7 +128,7 @@ export default function OtpScreen() {
         </View>
 
         <Text style={styles.hint}>
-          DEV MODE: Use {DEV_CONFIG.DEV_OTP} for instant verification
+          DEV MODE: Fixed OTP is {DEV_CONFIG.DEV_OTP} for any email address
         </Text>
       </View>
     </View>

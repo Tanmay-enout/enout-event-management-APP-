@@ -23,7 +23,7 @@ export default function EmailScreen() {
   } = useForm<EmailFormData>({
     resolver: zodResolver(emailSchema),
     defaultValues: {
-      email: DEV_CONFIG.DEV_EMAIL, // Pre-fill with dev email
+      email: '', // Allow any email to be entered
     },
   });
 
@@ -58,9 +58,9 @@ export default function EmailScreen() {
       }
     } catch (error) {
       console.error('Error in onSubmit:', error);
-      // For dev mode, if API fails, still try to navigate with dev email
-      if (data.email === DEV_CONFIG.DEV_EMAIL) {
-        console.log('DEV MODE: Navigating to OTP despite error');
+      // For dev mode, if API fails, still try to navigate with any email
+      if (DEV_CONFIG.DEV_AUTH_ENABLED) {
+        console.log('DEV MODE: Navigating to OTP despite error with any email');
         router.replace({
           pathname: '/(public)/otp',
           params: { email: data.email },
@@ -119,7 +119,7 @@ export default function EmailScreen() {
         </View>
 
         <Text style={styles.hint}>
-          DEV MODE: Use {DEV_CONFIG.DEV_EMAIL} for instant login
+          DEV MODE: Use any email address - OTP is fixed as {DEV_CONFIG.DEV_OTP}
         </Text>
       </View>
     </KeyboardAvoidingView>

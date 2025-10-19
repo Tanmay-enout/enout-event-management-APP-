@@ -33,9 +33,9 @@ export const api = {
       }
     }
 
-    // Development auth bypass - accept fixed dev email
-    if (DEV_CONFIG.DEV_AUTH_ENABLED && params.email === DEV_CONFIG.DEV_EMAIL) {
-      console.log('DEV MODE: Accepting dev email for OTP request:', params.email);
+    // Development auth bypass - accept any email with fixed OTP
+    if (DEV_CONFIG.DEV_AUTH_ENABLED) {
+      console.log('DEV MODE: Accepting any email for OTP request:', params.email);
       return {
         ok: true,
         message: 'OTP sent successfully (dev mode)',
@@ -76,11 +76,9 @@ export const api = {
       }
     }
 
-    // Development auth bypass - accept fixed dev credentials
-    if (DEV_CONFIG.DEV_AUTH_ENABLED && 
-        params.email === DEV_CONFIG.DEV_EMAIL && 
-        params.code === DEV_CONFIG.DEV_OTP) {
-      console.log('DEV MODE: Accepting dev email/OTP verification:', params.email);
+    // Development auth bypass - accept any email with fixed OTP
+    if (DEV_CONFIG.DEV_AUTH_ENABLED && params.code === DEV_CONFIG.DEV_OTP) {
+      console.log('DEV MODE: Accepting any email with fixed OTP verification:', params.email, params.code);
       
       // Store dev token and email for future authenticated requests
       const devToken = 'dev-token-' + Date.now();
@@ -168,8 +166,8 @@ export const api = {
     const currentEventId = await eventContext.getCurrentEventId();
     const userEmail = await storage.getItem('auth_email');
     
-    if (DEV_CONFIG.DEV_AUTH_ENABLED && userEmail === DEV_CONFIG.DEV_EMAIL) {
-      console.log('DEV MODE: Returning dev invite data');
+    if (DEV_CONFIG.DEV_AUTH_ENABLED && userEmail) {
+      console.log('DEV MODE: Returning invite data for any email:', userEmail);
       return {
         ok: true,
         event: { id: currentEventId },
@@ -227,10 +225,10 @@ export const api = {
       }
     }
 
-    // Development auth bypass - always succeed for dev user
+    // Development auth bypass - always succeed for any authenticated user
     const userEmail = await storage.getItem('auth_email');
-    if (DEV_CONFIG.DEV_AUTH_ENABLED && userEmail === DEV_CONFIG.DEV_EMAIL) {
-      console.log('DEV MODE: Accepting invite for dev user');
+    if (DEV_CONFIG.DEV_AUTH_ENABLED && userEmail) {
+      console.log('DEV MODE: Accepting invite for any authenticated user:', userEmail);
       return {
         ok: true,
         message: 'Invite accepted successfully (dev mode)',
