@@ -14,6 +14,54 @@ export class AuthService {
     // For development, just log the OTP
     const otp = '123456';
     console.log(`OTP for ${email}: ${otp}`);
+
+    // Create or find user when sending OTP
+    try {
+      const user = await this.prisma.user.upsert({
+        where: { email },
+        update: {
+          // Update last access time
+          updatedAt: new Date(),
+        },
+        create: {
+          email,
+          name: email.split('@')[0], // Use email prefix as name
+          role: 'USER', // Mobile app user role
+        },
+      });
+      console.log(`User created/found for email: ${email}, ID: ${user.id}`);
+
+      // Also create/update attendee record for default event (event-1)
+      // This ensures the mobile app can work with the user
+      try {
+        const defaultEventId = 'event-1';
+        await this.prisma.attendee.upsert({
+          where: {
+            eventId_email: {
+              eventId: defaultEventId,
+              email: email,
+            },
+          },
+          update: {
+            updatedAt: new Date(),
+          },
+          create: {
+            eventId: defaultEventId,
+            email: email,
+            firstName: email.split('@')[0], // Use email prefix as firstName
+            lastName: '', // Empty for now, can be updated later
+            derivedStatus: 'not_invited', // Default status
+          },
+        });
+        console.log(`Attendee record created/updated for ${email} in event ${defaultEventId}`);
+      } catch (attendeeError) {
+        console.error(`Failed to create/update attendee for ${email}:`, attendeeError);
+        // Don't throw error to prevent OTP sending from failing
+      }
+    } catch (error) {
+      console.error(`Failed to create/find user for ${email}:`, error);
+      // Don't throw error to prevent OTP sending from failing
+    }
   }
 
   async verifyOtp(email: string, otp: string): Promise<boolean> {

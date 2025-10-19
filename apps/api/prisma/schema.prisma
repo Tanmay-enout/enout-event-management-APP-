@@ -27,6 +27,7 @@ model User {
 enum UserRole {
   ADMIN
   HR
+  USER
 
   @@map("user_roles")
 }
