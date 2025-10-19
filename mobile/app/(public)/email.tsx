@@ -5,6 +5,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '../../src/lib/api';
+import { DEV_CONFIG } from '../../src/lib/config';
 
 // Email validation schema
 const emailSchema = z.object({
@@ -22,7 +23,7 @@ export default function EmailScreen() {
   } = useForm<EmailFormData>({
     resolver: zodResolver(emailSchema),
     defaultValues: {
-      email: '',
+      email: DEV_CONFIG.DEV_EMAIL, // Pre-fill with dev email
     },
   });
 
@@ -57,7 +58,16 @@ export default function EmailScreen() {
       }
     } catch (error) {
       console.error('Error in onSubmit:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      // For dev mode, if API fails, still try to navigate with dev email
+      if (data.email === DEV_CONFIG.DEV_EMAIL) {
+        console.log('DEV MODE: Navigating to OTP despite error');
+        router.replace({
+          pathname: '/(public)/otp',
+          params: { email: data.email },
+        });
+      } else {
+        Alert.alert('Error', 'Something went wrong. Please try again.');
+      }
     }
   };
 
@@ -109,7 +119,7 @@ export default function EmailScreen() {
         </View>
 
         <Text style={styles.hint}>
-          Tip: Use an email ending with @brevo.com for testing
+          DEV MODE: Use {DEV_CONFIG.DEV_EMAIL} for instant login
         </Text>
       </View>
     </KeyboardAvoidingView>

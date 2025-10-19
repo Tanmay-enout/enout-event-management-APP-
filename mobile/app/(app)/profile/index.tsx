@@ -31,7 +31,17 @@ export default function ProfileScreen() {
   const loadProfile = async () => {
     try {
       const response = await api.getMe();
-      setProfile(response);
+      
+      // Handle both old mock response and new API response format
+      if (response.ok && response.data) {
+        // New API format
+        setProfile(response.data);
+      } else if (response.email || response.firstName) {
+        // Old mock format - direct response
+        setProfile(response);
+      } else {
+        throw new Error('Invalid response format');
+      }
     } catch (error) {
       console.error('Error loading profile:', error);
       Alert.alert('Error', 'Failed to load profile');

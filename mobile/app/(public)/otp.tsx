@@ -5,6 +5,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '../../src/lib/api';
+import { DEV_CONFIG } from '../../src/lib/config';
 
 // OTP validation schema
 const otpSchema = z.object({
@@ -24,7 +25,7 @@ export default function OtpScreen() {
   } = useForm<OtpFormData>({
     resolver: zodResolver(otpSchema),
     defaultValues: {
-      code: '',
+      code: DEV_CONFIG.DEV_OTP, // Pre-fill with dev OTP
     },
   });
 
@@ -56,10 +57,16 @@ export default function OtpScreen() {
       }
     } catch (error) {
       console.error('OTP Screen: Error in onSubmit:', error);
-      if (error instanceof Error) {
-        Alert.alert('Error', error.message);
+      // For dev mode, if API fails, still try to navigate with dev credentials
+      if (email === DEV_CONFIG.DEV_EMAIL && data.code === DEV_CONFIG.DEV_OTP) {
+        console.log('DEV MODE: Navigating despite error - using dev credentials');
+        router.push('/invite'); // Navigate to invite screen as fallback
       } else {
-        Alert.alert('Error', 'Invalid OTP. Please try again.');
+        if (error instanceof Error) {
+          Alert.alert('Error', error.message);
+        } else {
+          Alert.alert('Error', 'Invalid OTP. Please try again.');
+        }
       }
     }
   };
@@ -121,7 +128,7 @@ export default function OtpScreen() {
         </View>
 
         <Text style={styles.hint}>
-          Tip: Use 123456 for testing
+          DEV MODE: Use {DEV_CONFIG.DEV_OTP} for instant verification
         </Text>
       </View>
     </View>

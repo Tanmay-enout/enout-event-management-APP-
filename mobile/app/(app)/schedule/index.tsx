@@ -25,9 +25,19 @@ export default function ScheduleScreen() {
 
   const loadSchedule = async () => {
     try {
-      const response = await api.getSchedule('event-1');
-      if (Array.isArray(response)) {
-        setSchedule(response);
+      const response = await api.getSchedule();
+      
+      // Handle both old mock response and new API response format
+      let scheduleData = null;
+      if (response.ok && response.data) {
+        scheduleData = Array.isArray(response.data) ? response.data : response.data.data || [];
+      } else if (Array.isArray(response)) {
+        // Fallback for mock format
+        scheduleData = response;
+      }
+      
+      if (scheduleData && Array.isArray(scheduleData)) {
+        setSchedule(scheduleData);
       }
     } catch (error) {
       console.error('Error loading schedule:', error);

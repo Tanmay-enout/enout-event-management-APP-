@@ -30,7 +30,22 @@ export default function MessageDetailScreen() {
   const loadMessage = async () => {
     try {
       const response = await api.getMessage(messageId!);
-      setMessage(response);
+      
+      // Handle both old mock response and new API response format
+      if (response.ok && response.data) {
+        // New API format - map to expected format
+        const apiData = response.data;
+        setMessage({
+          subject: apiData.title || apiData.subject || 'No Subject',
+          text: apiData.body || apiData.text || '',
+          attachments: apiData.attachments || [],
+        });
+      } else if (response.subject) {
+        // Old mock format
+        setMessage(response);
+      } else {
+        throw new Error('Invalid response format');
+      }
     } catch (error) {
       console.error('Error loading message:', error);
       Alert.alert('Error', 'Failed to load message');

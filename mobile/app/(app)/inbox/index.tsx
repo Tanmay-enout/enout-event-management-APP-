@@ -27,8 +27,19 @@ export default function InboxScreen() {
   const loadMessages = async () => {
     try {
       const response = await api.listMessages();
-      if (response.items) {
-        setMessages(response.items);
+      
+      // Handle both old mock response and new API response format
+      let messagesData = null;
+      if (response.ok) {
+        // New API format
+        messagesData = response.items || response.data?.data || [];
+      } else if (response.items) {
+        // Old mock format
+        messagesData = response.items;
+      }
+      
+      if (messagesData && Array.isArray(messagesData)) {
+        setMessages(messagesData);
       }
     } catch (error) {
       console.error('Error loading messages:', error);
