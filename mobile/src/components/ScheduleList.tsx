@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet } from 'react-native';
 import { formatTime, formatDate } from '../lib/time';
 
 interface ScheduleItem {
@@ -17,8 +16,6 @@ interface ScheduleListProps {
 }
 
 export function ScheduleList({ schedule }: ScheduleListProps) {
-  const router = useRouter();
-
   if (schedule.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -26,10 +23,6 @@ export function ScheduleList({ schedule }: ScheduleListProps) {
       </View>
     );
   }
-
-  const handleSessionPress = (sessionId: string) => {
-    router.push(`/(app)/schedule/${sessionId}`);
-  };
 
   // Group schedule items by date
   const groupedSchedule = schedule.reduce((groups, item) => {
@@ -47,11 +40,9 @@ export function ScheduleList({ schedule }: ScheduleListProps) {
         <View key={date} style={styles.dateGroup}>
           <Text style={styles.dateHeader}>{date}</Text>
           {items.map((item) => (
-            <TouchableOpacity 
+            <View 
               key={item.id} 
               style={styles.scheduleItem}
-              onPress={() => handleSessionPress(item.id)}
-              activeOpacity={0.7}
             >
               <View style={styles.timeContainer}>
                 <Text style={styles.time}>
@@ -65,7 +56,7 @@ export function ScheduleList({ schedule }: ScheduleListProps) {
                   <Text style={styles.notes}>{item.notes}</Text>
                 )}
               </View>
-            </TouchableOpacity>
+            </View>
           ))}
         </View>
       ))}

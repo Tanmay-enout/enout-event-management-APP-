@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '../../../src/lib/api';
 import { PhoneOtpForm } from '../../../src/components/FormFields/PhoneOtpForm';
+import { DEV_CONFIG } from '../../../src/lib/config';
+import { storage } from '../../../src/lib/storage';
 
 // Phone OTP validation schema
 const phoneOtpSchema = z.object({
@@ -27,14 +29,17 @@ export default function PhoneVerificationScreen() {
   } = useForm<PhoneOtpFormData>({
     resolver: zodResolver(phoneOtpSchema),
     defaultValues: {
-      code: '',
+      code: DEV_CONFIG.DEV_OTP, // Pre-fill with development OTP
     },
   });
 
   useEffect(() => {
-    // Request OTP when screen loads
-    requestPhoneOtp();
-  }, []);
+    // Set the phone number from params if available
+    if (paramPhoneNumber) {
+      setPhoneNumber(paramPhoneNumber);
+      console.log('Phone number set from params:', paramPhoneNumber);
+    }
+  }, [paramPhoneNumber]);
 
   const requestPhoneOtp = async () => {
     try {
@@ -51,11 +56,23 @@ export default function PhoneVerificationScreen() {
 
   const onSubmit = async (data: PhoneOtpFormData) => {
     try {
-      const response = await api.verifyPhone({ code: data.code });
+      const response = await api.verifyPhone({ 
+        code: data.code,
+        phone: phoneNumber 
+      });
       
       if (response.ok) {
-        // Navigate back to tasks screen to show completed status
-        router.replace('/(public)/tasks');
+        // Set flag that user has verified phone through mobile app
+        await storage.setItem('user_verified_phone', 'true');
+        console.log('Phone verification successful - setting user_verified_phone flag');
+        
+        Alert.alert('Success', 'Phone verification successful!');
+        // Small delay to ensure API updates are reflected
+        setTimeout(() => {
+          router.replace('/(public)/tasks');
+        }, 100);
+      } else {
+        Alert.alert('Error', response.message || 'Invalid phone code. Please try again.');
       }
     } catch (error) {
       if (error instanceof Error) {

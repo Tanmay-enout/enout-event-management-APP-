@@ -4,10 +4,14 @@ import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { api } from '../../../src/lib/api';
+import { DEV_CONFIG } from '../../../src/lib/config';
+import { storage } from '../../../src/lib/storage';
 
-// Phone number validation schema
+// Phone number validation schema with country code
 const phoneSchema = z.object({
-  phoneNumber: z.string().min(10, 'Please enter a valid phone number'),
+  countryCode: z.string().min(1, 'Country code is required'),
+  phoneNumber: z.string().min(7, 'Please enter a valid phone number'),
 });
 
 type PhoneFormData = z.infer<typeof phoneSchema>;
@@ -23,6 +27,7 @@ export default function PhoneInputScreen() {
   } = useForm<PhoneFormData>({
     resolver: zodResolver(phoneSchema),
     defaultValues: {
+      countryCode: '+1',
       phoneNumber: '',
     },
   });
@@ -30,17 +35,44 @@ export default function PhoneInputScreen() {
   const onSubmit = async (data: PhoneFormData) => {
     try {
       setIsSubmitting(true);
-      // Simulate API call to send OTP
-      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Navigate to OTP screen with phone number
+      // Clear any previous phone verification flag since user is starting new verification
+      await storage.removeItem('user_verified_phone');
+      console.log('Cleared previous phone verification flag for new verification');
+      
+      // Combine country code and phone number
+      const fullPhoneNumber = `${data.countryCode}${data.phoneNumber}`;
+      console.log('Submitting phone number:', fullPhoneNumber);
+      
+      // First, update the profile with the phone number
+      console.log('Updating profile with phone number...');
+      const updateResponse = await api.updateMe({ phone: fullPhoneNumber });
+      
+      if (!updateResponse.ok) {
+        throw new Error(updateResponse.message || 'Failed to update phone number');
+      }
+      
+      console.log('Phone number updated successfully');
+      
+      // Then request OTP for the phone number
+      console.log('Requesting phone OTP...');
+      const otpResponse = await api.requestPhoneOtp({ phone: fullPhoneNumber });
+      
+      if (!otpResponse.ok) {
+        throw new Error(otpResponse.message || 'Failed to send OTP');
+      }
+      
+      console.log('OTP requested successfully');
+      
+      // Navigate to OTP verification screen
       router.push({
         pathname: '/(public)/tasks/phone',
-        params: { phoneNumber: data.phoneNumber }
+        params: { phoneNumber: fullPhoneNumber }
       });
+      
     } catch (error) {
-      console.error('Error sending OTP:', error);
-      Alert.alert('Error', 'Failed to send OTP. Please try again.');
+      console.error('Error in phone input submission:', error);
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to send OTP. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -57,23 +89,42 @@ export default function PhoneInputScreen() {
         <View style={styles.form}>
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Phone Number *</Text>
-            <Controller
-              control={control}
-              name="phoneNumber"
-              render={({ field: { onChange, onBlur, value } }) => (
-                <TextInput
-                  style={[styles.input, errors.phoneNumber && styles.inputError]}
-                  placeholder="Enter your phone number"
-                  value={value}
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  keyboardType="phone-pad"
-                  editable={!isSubmitting}
-                />
-              )}
-            />
-            {errors.phoneNumber && (
-              <Text style={styles.errorText}>{errors.phoneNumber.message}</Text>
+            <View style={styles.phoneInputContainer}>
+              <Controller
+                control={control}
+                name="countryCode"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <TextInput
+                    style={[styles.countryCodeInput, errors.countryCode && styles.inputError]}
+                    placeholder="+1"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    keyboardType="phone-pad"
+                    editable={!isSubmitting}
+                  />
+                )}
+              />
+              <Controller
+                control={control}
+                name="phoneNumber"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <TextInput
+                    style={[styles.phoneNumberInput, errors.phoneNumber && styles.inputError]}
+                    placeholder="1234567890"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    keyboardType="phone-pad"
+                    editable={!isSubmitting}
+                  />
+                )}
+              />
+            </View>
+            {(errors.phoneNumber || errors.countryCode) && (
+              <Text style={styles.errorText}>
+                {errors.countryCode?.message || errors.phoneNumber?.message}
+              </Text>
             )}
           </View>
 
@@ -135,6 +186,41 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1e293b',
     marginBottom: 8,
+  },
+  phoneInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  countryCodeInput: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+    maxWidth: 100,
+  },
+  phoneNumberInput: {
+    flex: 2,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   input: {
     borderWidth: 2,

@@ -376,18 +376,32 @@ export class InvitesService {
   private mapInviteToGuestDto(invite: any): GuestDto {
     const attendee = invite.event?.attendees?.[0];
     
-    // Determine derived status
+    // Determine derived status - PRIMARY source is invite table status
     let derivedStatus = 'not_invited';
-    if (invite.status === 'sent' && invite.lastSentAt) {
-      derivedStatus = 'invited';
+    
+    // Primary logic: Use invite table status
+    switch (invite.status) {
+      case 'accepted':
+        derivedStatus = 'accepted';
+        break;
+      case 'sent':
+        if (invite.lastSentAt) {
+          derivedStatus = 'invited';
+        }
+        break;
+      case 'pending':
+      default:
+        derivedStatus = 'not_invited';
+        break;
     }
-    if (attendee?.phoneVerified) {
+    
+    // Secondary check: If attendee exists and has verified email (OTP), show as email_verified
+    if (attendee?.phoneVerified && invite.status === 'sent') {
       derivedStatus = 'email_verified';
     }
-    if (attendee?.acceptedAt) {
-      derivedStatus = 'accepted';
-    }
-    if (attendee?.id) {
+    
+    // Final state: If attendee is fully registered (has ID and accepted), show as registered
+    if (attendee?.id && attendee?.acceptedAt && invite.status === 'accepted') {
       derivedStatus = 'registered';
     }
 

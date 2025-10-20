@@ -1,83 +1,130 @@
-import { mockApi } from '../mocks/mobileMocks';
 import { httpClient } from './http';
-import { API_ENDPOINTS, DEV_CONFIG } from './config';
+import { API_ENDPOINTS, DEV_CONFIG, isDevAuthEnabled } from './config';
 import { eventContext } from './eventContext';
 import { storage } from './storage';
-
-// Toggle to use real API or mocks
-export const USE_MOCKS = false;
 
 interface ApiResponse<T = unknown> {
   ok: boolean;
   message?: string;
-  data?: T;
+  data?: any;
   inviteStatus?: string;
   token?: string;
   user?: {
     email: string;
-    id: string;
-    role: string;
+    firstName: string;
+    lastName: string;
   };
+  items?: any[];
+  subject?: string;
+  text?: string;
+  attachments?: any[];
+  event?: {
+    id: string;
+  };
+  invite?: any;
+  fileUrl?: string;
+  idDocUrl?: string;
 }
 
-// API adapter that calls mocks directly (no fetch)
+// Real API integration - fully connected to backend
 export const api = {
   // Auth APIs
   async requestEmailOtp(params: { email: string }): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.requestEmailOtp(params);
-      } catch (error) {
-        console.error('requestEmailOtp error:', error);
-        throw error;
-      }
-    }
-
-    // Development auth bypass - accept any email with fixed OTP
-    if (DEV_CONFIG.DEV_AUTH_ENABLED) {
-      console.log('DEV MODE: Accepting any email for OTP request:', params.email);
-      return {
-        ok: true,
-        message: 'OTP sent successfully (dev mode)',
-        inviteStatus: 'pending', // Default to pending for dev flow
-      };
-    }
-
     try {
-      const response = await httpClient.post(API_ENDPOINTS.AUTH.SEND_OTP, params);
+      console.log('=== API CLIENT: Starting requestEmailOtp ===');
+      console.log('Received params object:', params);
+      console.log('Email from params:', params.email);
+      console.log('Email type:', typeof params.email);
+      console.log('Email is string:', typeof params.email === 'string');
+      console.log('API endpoint:', API_ENDPOINTS.AUTH.SEND_OTP);
+      console.log('Request params being sent:', JSON.stringify(params));
       
-      // The API might return void, so we handle that
-      if (response.ok) {
-        return {
-          ok: true,
-          message: 'OTP sent successfully',
-        };
-      } else {
+      if (!params.email) {
+        console.error('Email parameter is missing or empty!');
         return {
           ok: false,
-          message: response.message || 'Failed to send OTP',
-          // Note: We might need to handle inviteStatus based on API response
-          // This would need to be updated based on actual API behavior
+          message: 'Email parameter is required',
+          inviteStatus: 'error',
         };
+      }
+      
+      const response = await httpClient.post(API_ENDPOINTS.AUTH.SEND_OTP, params);
+      
+      console.log('=== API CLIENT: Response received ===');
+      console.log('Full API response:', JSON.stringify(response, null, 2));
+      console.log('response.ok:', response.ok);
+      console.log('response.status:', response.status);
+      console.log('response.data:', response.data);
+      console.log('response.message:', response.message);
+      
+      if (response.ok) {
+        console.log('=== API CLIENT: Success response ===');
+        console.log('User exists, OTP sent successfully:', params.email);
+        
+        // Extract event information from API response
+        const responseData = response.data as any;
+        const eventId = responseData?.eventId;
+        const eventName = responseData?.eventName;
+        
+        if (eventId) {
+          console.log(`Storing event ID from API: ${eventId} (${eventName || 'Unknown'})`);
+          // Store the event ID for this user so we know which event they belong to
+          await eventContext.setCurrentEventId(eventId);
+        }
+        
+        const result = {
+          ok: true,
+          message: responseData?.message || 'OTP sent successfully',
+          inviteStatus: 'pending', // Will be checked later via getInvite()
+        };
+        console.log('Returning success result:', result);
+        return result;
+      } else {
+        console.log('=== API CLIENT: Error response ===');
+        console.error('API returned error:', response.message);
+        console.error('Status:', response.status);
+        
+        // Handle different error status codes
+        let errorMessage = 'An error occurred. Please try again.';
+        let inviteStatus = 'error';
+        
+        if (response.status === 400) {
+          console.log('=== 400 Bad Request Error ===');
+          errorMessage = response.message || 'Invalid request. Please check if the email is valid.';
+        } else if (response.status === 404 || response.message?.includes('does not exist')) {
+          console.log('=== 404 Not Found Error ===');
+          errorMessage = response.message || 'User with this email does not exist. Please contact the administrator to create an account.';
+          inviteStatus = 'not_found';
+        } else if (response.status === 500) {
+          console.log('=== 500 Server Error ===');
+          errorMessage = response.message || 'Server error. Please try again later.';
+        } else {
+          console.log('=== Other Error ===');
+          errorMessage = response.message || 'Failed to send OTP. Please try again.';
+        }
+        
+        const result = {
+          ok: false,
+          message: errorMessage,
+          inviteStatus: inviteStatus,
+        };
+        console.log('Returning error result:', result);
+        return result;
       }
     } catch (error) {
       console.error('requestEmailOtp error:', error);
-      throw error;
+      // If we get any error, treat it as user not found for security
+      return {
+        ok: false,
+        message: 'User with this email does not exist. Please contact the administrator to create an account.',
+        inviteStatus: 'not_found',
+      };
     }
   },
 
   async verifyEmail(params: { email: string; code: string }): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.verifyEmail(params);
-      } catch (error) {
-        console.error('verifyEmail error:', error);
-        throw error;
-      }
-    }
-
     // Development auth bypass - accept any email with fixed OTP
-    if (DEV_CONFIG.DEV_AUTH_ENABLED && params.code === DEV_CONFIG.DEV_OTP) {
+    if (isDevAuthEnabled() && params.code === DEV_CONFIG.DEV_OTP) {
       console.log('DEV MODE: Accepting any email with fixed OTP verification:', params.email, params.code);
       
       // Store dev token and email for future authenticated requests
@@ -85,11 +132,17 @@ export const api = {
       await storage.setItem('auth_token', devToken);
       await storage.setItem('auth_email', params.email);
       
+      // Get user info and invite status after successful verification
+      const userInfo = await this.getUserInfo();
+      const inviteInfo = await this.getInvite();
+      
       return {
         ok: true,
         message: 'Email verified successfully (dev mode)',
         token: devToken,
-        inviteStatus: 'pending', // Default to pending for dev flow
+        user: userInfo.ok ? userInfo.user : undefined,
+        inviteStatus: inviteInfo.inviteStatus || 'pending',
+        invite: inviteInfo.invite || null,
       };
     }
 
@@ -99,17 +152,23 @@ export const api = {
         otp: params.code,
       });
 
-      if (response.ok && response.data?.access_token) {
+      const responseData = response.data as any;
+      if (response.ok && responseData?.access_token) {
         // Store the token and email for future authenticated requests
-        await storage.setItem('auth_token', response.data.access_token);
+        await storage.setItem('auth_token', responseData.access_token);
         await storage.setItem('auth_email', params.email);
+        
+        // Get user info and invite status after successful verification
+        const userInfo = await this.getUserInfo();
+        const inviteInfo = await this.getInvite();
         
         return {
           ok: true,
           message: 'Email verified successfully',
-          token: response.data.access_token,
-          // Note: We might need to get inviteStatus from another endpoint
-          inviteStatus: 'pending', // This should come from the API response
+          token: responseData.access_token,
+          user: userInfo.ok ? userInfo.user : undefined,
+          inviteStatus: inviteInfo.inviteStatus || 'pending',
+          invite: inviteInfo.invite || null,
         };
       } else {
         throw new Error(response.message || 'Invalid OTP');
@@ -121,16 +180,6 @@ export const api = {
   },
 
   async resendOtp(params: { email: string }): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.resendOtp(params);
-      } catch (error) {
-        console.error('resendOtp error:', error);
-        throw error;
-      }
-    }
-
-    // For now, reuse the same endpoint as requestEmailOtp
     try {
       const response = await httpClient.post(API_ENDPOINTS.AUTH.SEND_OTP, params);
       
@@ -153,51 +202,59 @@ export const api = {
 
   // Invite APIs
   async getInvite(): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.getInvite();
-      } catch (error) {
-        console.error('getInvite error:', error);
-        throw error;
-      }
-    }
-
-    // Development auth bypass - return proper invite structure for dev user
     const currentEventId = await eventContext.getCurrentEventId();
     const userEmail = await storage.getItem('auth_email');
     
-    if (DEV_CONFIG.DEV_AUTH_ENABLED && userEmail) {
-      console.log('DEV MODE: Returning invite data for any email:', userEmail);
+    if (!userEmail) {
       return {
-        ok: true,
-        event: { id: currentEventId },
-        inviteStatus: 'pending', // Always pending for dev mode to show accept button
+        ok: false,
+        message: 'No authenticated user email found',
+        inviteStatus: 'not_found',
       };
     }
 
     try {
-      if (!userEmail) {
-        return {
-          ok: false,
-          message: 'No authenticated user email found',
-          inviteStatus: 'not_found',
-        };
-      }
-
-      // For now, we'll return a basic response
-      // In a real implementation, this would query the invites endpoint for the user
+      // Query the invites endpoint to get the user's invite status
       const inviteResponse = await httpClient.get(API_ENDPOINTS.INVITES.LIST(currentEventId));
       
       if (inviteResponse.ok) {
-        // Check if the current user has an invite for this event
-        const invites = inviteResponse.data?.data || [];
+        // Find the user's invite in the list
+        const inviteResponseData = inviteResponse.data as any;
+        const invites = inviteResponseData?.data || [];
         const userInvite = invites.find((invite: any) => invite.email === userEmail);
         
-        return {
+        if (!userInvite) {
+          return {
+            ok: false,
+            message: 'No invite found for this user',
+            inviteStatus: 'not_found',
+          };
+        }
+
+        // Map the derivedStatus to our inviteStatus
+        let inviteStatus = 'pending';
+        switch (userInvite.derivedStatus) {
+          case 'invited':
+          case 'email_verified':
+            inviteStatus = 'pending'; // Show accept button
+            break;
+          case 'accepted':
+          case 'registered':
+            inviteStatus = 'accepted'; // Show continue button
+            break;
+          default:
+            inviteStatus = 'pending';
+        }
+
+        console.log(`User invite status for ${userEmail}:`, userInvite.derivedStatus, '->', inviteStatus);
+        
+        const result: ApiResponse = {
           ok: true,
-          event: { id: currentEventId }, // Basic event info
-          inviteStatus: userInvite ? 'accepted' : 'pending', // Simplified for now
+          event: { id: currentEventId },
+          inviteStatus,
+          invite: userInvite, // Include full invite data if needed
         };
+        return result;
       } else {
         return {
           ok: false,
@@ -216,132 +273,263 @@ export const api = {
   },
 
   async acceptInvite(): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.acceptInvite();
-      } catch (error) {
-        console.error('acceptInvite error:', error);
-        throw error;
+    try {
+      const userEmail = await storage.getItem('auth_email');
+      
+      if (!userEmail) {
+        return {
+          ok: false,
+          message: 'No authenticated user email found',
+        };
       }
-    }
 
-    // Development auth bypass - always succeed for any authenticated user
-    const userEmail = await storage.getItem('auth_email');
-    if (DEV_CONFIG.DEV_AUTH_ENABLED && userEmail) {
-      console.log('DEV MODE: Accepting invite for any authenticated user:', userEmail);
+      console.log('Accepting invite for user:', userEmail);
+
+      // Call the new accept invite endpoint
+      console.log('Calling accept invite endpoint with email:', userEmail);
+      const response = await httpClient.post(API_ENDPOINTS.AUTH.ACCEPT_INVITE, { email: userEmail });
+      
+      console.log('Accept invite API response:', {
+        ok: response.ok,
+        status: response.status,
+        message: response.message,
+        data: response.data
+      });
+      
+      if (response.ok) {
+        console.log('Invite accepted successfully via API - backend has updated attendee status');
+        return {
+          ok: true,
+          message: (response.data as any)?.message || 'Invite accepted successfully',
+        };
+      } else {
+        console.error('Failed to accept invite via API:', response.message);
+        return {
+          ok: false,
+          message: response.message || 'Failed to accept invite. Please try again.',
+        };
+      }
+    } catch (error) {
+      console.error('acceptInvite error:', error);
       return {
-        ok: true,
-        message: 'Invite accepted successfully (dev mode)',
+        ok: false,
+        message: 'Failed to accept invite. Please try again.',
       };
     }
-
-    // Note: This would need to be implemented based on the actual API
-    // For now, return success to allow the app flow to continue
-    console.warn('acceptInvite - real API implementation needed');
-    return {
-      ok: true,
-      message: 'Invite accepted successfully',
-    };
   },
 
-  // Tasks APIs
+  // Tasks APIs - Real implementation
   async uploadId(file: any): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.uploadId(file);
-      } catch (error) {
-        console.error('uploadId error:', error);
-        throw error;
+    try {
+      const currentEventId = await eventContext.getCurrentEventId();
+      const userEmail = await storage.getItem('auth_email');
+      
+      if (!userEmail) {
+        return {
+          ok: false,
+          message: 'No authenticated user email found',
+        };
       }
-    }
 
-    // Note: File upload endpoint needs to be determined
-    console.warn('uploadId API endpoint not yet implemented for real API');
-    return {
-      ok: false,
-      message: 'uploadId not implemented yet',
-    };
+      console.log('Uploading document for user:', userEmail, 'event:', currentEventId);
+
+      // Create FormData for file upload
+      const formData = new FormData();
+      
+      // Determine file type and name
+      const fileName = file.name || file.fileName || 'document';
+      const fileType = file.type || (fileName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+      const finalFileName = fileName.includes('.') ? fileName : `${fileName}.pdf`;
+      
+      formData.append('document', {
+        uri: file.uri || file.path,
+        type: fileType,
+        name: finalFileName,
+      } as any);
+      formData.append('email', userEmail);
+
+      const response = await httpClient.post(API_ENDPOINTS.MOBILE.UPLOAD_DOCUMENT(currentEventId), formData);
+
+      if (response.ok) {
+        const responseData = response.data as any;
+        return {
+          ok: true,
+          message: responseData?.message || 'Document uploaded successfully',
+          fileUrl: responseData?.idDocUrl,
+        };
+      } else {
+        throw new Error(response.message || 'Failed to upload document');
+      }
+    } catch (error) {
+      console.error('uploadId error:', error);
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Failed to upload document',
+      };
+    }
   },
 
   async saveRegistrationForm(values: any): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.saveRegistrationForm(values);
-      } catch (error) {
-        console.error('saveRegistrationForm error:', error);
-        throw error;
-      }
-    }
-
-    // This could potentially use the profile update endpoint
     try {
       const currentEventId = await eventContext.getCurrentEventId();
-      const response = await httpClient.patch(API_ENDPOINTS.MOBILE.PROFILE(currentEventId), values);
+      const userEmail = await storage.getItem('auth_email');
+      
+      if (!userEmail) {
+        return {
+          ok: false,
+          message: 'No authenticated user email found',
+        };
+      }
+
+      console.log('=== SAVE REGISTRATION FORM DEBUG ===');
+      console.log('User email:', userEmail);
+      console.log('Current event ID:', currentEventId);
+      console.log('Form values received:', values);
+
+      // Map mobile form fields to API field names and filter out undefined values
+      const formData: any = {};
+
+      // Only include fields that have actual values
+      if (values.name || values.firstName) {
+        formData.firstName = values.name || values.firstName;
+      }
+      if (values.surname || values.lastName) {
+        formData.lastName = values.surname || values.lastName;
+      }
+      if (values.mealPreference || values.dietaryRequirements) {
+        formData.dietaryRequirements = values.mealPreference || values.dietaryRequirements;
+      }
+      if (values.workEmail) {
+        formData.workEmail = values.workEmail;
+      }
+      if (values.location) {
+        formData.location = values.location;
+      }
+      if (values.gender) {
+        formData.gender = values.gender;
+      }
+
+      console.log('Mapped form data:', formData);
+
+      // Add email as query parameter
+      const endpoint = `${API_ENDPOINTS.MOBILE.PROFILE(currentEventId)}?email=${encodeURIComponent(userEmail)}`;
+      console.log('Making PATCH request to:', endpoint);
+      console.log('Request body:', formData);
+      
+      const response = await httpClient.patch(endpoint, formData);
+      
+      console.log('API Response:', response);
       
       if (response.ok) {
         return {
           ok: true,
-          message: 'Registration form saved',
+          message: 'Registration form saved successfully',
         };
       } else {
         throw new Error(response.message || 'Failed to save registration form');
       }
     } catch (error) {
       console.error('saveRegistrationForm error:', error);
-      throw error;
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Failed to save registration form',
+      };
     }
   },
 
-  async requestPhoneOtp(params?: { phone: string }): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.requestPhoneOtp(params || { phone: '' });
-      } catch (error) {
-        console.error('requestPhoneOtp error:', error);
-        throw error;
+  async requestPhoneOtp(params: { phone: string }): Promise<ApiResponse> {
+    try {
+      const userEmail = await storage.getItem('auth_email');
+      
+      if (!userEmail) {
+        return {
+          ok: false,
+          message: 'No authenticated user email found',
+        };
       }
-    }
 
-    // Note: Phone OTP endpoint needs to be determined
-    console.warn('requestPhoneOtp API endpoint not yet implemented for real API');
-    return {
-      ok: false,
-      message: 'requestPhoneOtp not implemented yet',
-    };
-  },
+      console.log('Requesting phone OTP for:', params.phone, 'user:', userEmail);
 
-  async verifyPhone(params: { code: string }): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.verifyPhone(params);
-      } catch (error) {
-        console.error('verifyPhone error:', error);
-        throw error;
+      const response = await httpClient.post(API_ENDPOINTS.AUTH.REQUEST_PHONE_OTP, {
+        phone: params.phone,
+        userEmail: userEmail,
+      });
+
+      if (response.ok) {
+        const responseData = response.data as any;
+        return {
+          ok: true,
+          message: responseData?.message || 'Phone OTP sent successfully',
+        };
+      } else {
+        return {
+          ok: false,
+          message: response.message || 'Failed to send phone OTP',
+        };
       }
+    } catch (error) {
+      console.error('requestPhoneOtp error:', error);
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Failed to send phone OTP',
+      };
     }
-
-    // Note: Phone verification endpoint needs to be determined
-    console.warn('verifyPhone API endpoint not yet implemented for real API');
-    return {
-      ok: false,
-      message: 'verifyPhone not implemented yet',
-    };
   },
 
-  // Inbox APIs
+  async verifyPhone(params: { code: string; phone?: string }): Promise<ApiResponse> {
+    try {
+      const userEmail = await storage.getItem('auth_email');
+      
+      if (!userEmail) {
+        return {
+          ok: false,
+          message: 'No authenticated user email found',
+        };
+      }
+
+      console.log('Verifying phone OTP:', params.code, 'phone:', params.phone, 'user:', userEmail);
+
+      const response = await httpClient.post(API_ENDPOINTS.AUTH.VERIFY_PHONE_OTP, {
+        phone: params.phone || '+1234567890', // fallback phone if not provided
+        code: params.code,
+        userEmail: userEmail,
+      });
+
+      if (response.ok) {
+        const responseData = response.data as any;
+        return {
+          ok: true,
+          message: responseData?.message || 'Phone verified successfully',
+        };
+      } else {
+        return {
+          ok: false,
+          message: response.message || 'Failed to verify phone OTP',
+        };
+      }
+    } catch (error) {
+      console.error('verifyPhone error:', error);
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Failed to verify phone OTP',
+      };
+    }
+  },
+
+  // Inbox APIs - Real implementation
   async listMessages(eventId?: string): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.listMessages();
-      } catch (error) {
-        console.error('listMessages error:', error);
-        throw error;
-      }
-    }
-
     try {
       const currentEventId = eventId || await eventContext.getCurrentEventId();
-      const response = await httpClient.get(API_ENDPOINTS.MOBILE.MESSAGES(currentEventId));
+      const userEmail = await storage.getItem('auth_email');
+      
+      if (!userEmail) {
+        return {
+          ok: false,
+          message: 'No authenticated user email found',
+        };
+      }
+
+      const response = await httpClient.get(`${API_ENDPOINTS.MOBILE.MESSAGES(currentEventId)}?email=${encodeURIComponent(userEmail)}`);
       
       if (response.ok) {
         // Map API response to expected format
@@ -360,32 +548,27 @@ export const api = {
       }
     } catch (error) {
       console.error('listMessages error:', error);
-      throw error;
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Failed to load messages',
+      };
     }
   },
 
   async getMessage(id: string, eventId?: string): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.getMessage(id);
-      } catch (error) {
-        console.error('getMessage error:', error);
-        throw error;
-      }
-    }
-
     try {
       const currentEventId = eventId || await eventContext.getCurrentEventId();
       const response = await httpClient.get(API_ENDPOINTS.MOBILE.MESSAGE_DETAIL(currentEventId, id));
       
       if (response.ok) {
+        const responseData = response.data as any;
         return {
           ok: true,
           data: response.data,
           // Map API response to expected format
-          subject: response.data?.title,
-          text: response.data?.body,
-          attachments: response.data?.attachments || [],
+          subject: responseData?.title,
+          text: responseData?.body,
+          attachments: responseData?.attachments || [],
         };
       } else {
         throw new Error(response.message || 'Message not found');
@@ -397,15 +580,6 @@ export const api = {
   },
 
   async acknowledgeMessage(id: string, eventId?: string): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.acknowledgeMessage(id);
-      } catch (error) {
-        console.error('acknowledgeMessage error:', error);
-        throw error;
-      }
-    }
-
     try {
       const currentEventId = eventId || await eventContext.getCurrentEventId();
       const response = await httpClient.post(API_ENDPOINTS.MOBILE.ACKNOWLEDGE_MESSAGE(currentEventId, id));
@@ -424,17 +598,8 @@ export const api = {
     }
   },
 
-  // Schedule APIs
+  // Schedule APIs - Real implementation
   async getSchedule(eventId?: string): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.getSchedule(eventId || 'event-1');
-      } catch (error) {
-        console.error('getSchedule error:', error);
-        throw error;
-      }
-    }
-
     try {
       const currentEventId = eventId || await eventContext.getCurrentEventId();
       const response = await httpClient.get(API_ENDPOINTS.SCHEDULE.LIST(currentEventId));
@@ -447,28 +612,92 @@ export const api = {
           data: apiData?.data || apiData || [],
         };
       } else {
-        throw new Error(response.message || 'Failed to load schedule');
+        return {
+          ok: false,
+          message: response.message || 'Failed to load schedule',
+        };
       }
     } catch (error) {
       console.error('getSchedule error:', error);
-      throw error;
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Failed to load schedule',
+      };
     }
   },
 
-  // Profile APIs
-  async getMe(eventId?: string): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.getMe();
-      } catch (error) {
-        console.error('getMe error:', error);
-        throw error;
+  // User info and profile APIs
+  async getUserInfo(): Promise<ApiResponse> {
+    try {
+      const userEmail = await storage.getItem('auth_email');
+      
+      if (!userEmail) {
+        return {
+          ok: false,
+          message: 'No authenticated user email found',
+        };
       }
-    }
 
+      // Get user info from invite/attendee data by calling the same logic as getInvite
+      try {
+        const currentEventId = await eventContext.getCurrentEventId();
+        const inviteResponse = await httpClient.get(API_ENDPOINTS.INVITES.LIST(currentEventId));
+        
+        if (inviteResponse.ok) {
+          const inviteResponseData = inviteResponse.data as any;
+          const invites = inviteResponseData?.data || [];
+          const userInvite = invites.find((invite: any) => invite.email === userEmail);
+          
+          if (userInvite) {
+            return {
+              ok: true,
+              user: {
+                email: userEmail,
+                firstName: userInvite.firstName || userEmail.split('@')[0],
+                lastName: userInvite.lastName || '',
+              },
+            };
+          }
+        }
+      } catch (inviteError) {
+        console.log('Could not get invite info for user:', inviteError);
+      }
+
+      // Fallback: derive from email if invite not found
+      const firstName = userEmail.split('@')[0];
+      const userInfo = {
+        email: userEmail,
+        firstName: firstName.charAt(0).toUpperCase() + firstName.slice(1),
+        lastName: '',
+      };
+
+      return {
+        ok: true,
+        user: userInfo,
+      };
+    } catch (error) {
+      console.error('getUserInfo error:', error);
+      return {
+        ok: false,
+        message: 'Failed to get user information',
+      };
+    }
+  },
+
+  // Profile APIs - Real implementation
+  async getMe(eventId?: string): Promise<ApiResponse> {
     try {
       const currentEventId = eventId || await eventContext.getCurrentEventId();
-      const response = await httpClient.get(API_ENDPOINTS.MOBILE.PROFILE(currentEventId));
+      const userEmail = await storage.getItem('auth_email');
+      
+      if (!userEmail) {
+        return {
+          ok: false,
+          message: 'No authenticated user email found',
+        };
+      }
+
+      const response = await httpClient.get(`${API_ENDPOINTS.MOBILE.PROFILE(currentEventId)}?email=${encodeURIComponent(userEmail)}`);
       
       if (response.ok) {
         return {
@@ -476,27 +705,38 @@ export const api = {
           data: response.data,
         };
       } else {
-        throw new Error(response.message || 'Failed to load profile');
+        return {
+          ok: false,
+          message: response.message || 'Failed to load profile',
+        };
       }
     } catch (error) {
       console.error('getMe error:', error);
-      throw error;
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Failed to load profile',
+      };
     }
   },
 
   async updateMe(partial: any, eventId?: string): Promise<ApiResponse> {
-    if (USE_MOCKS) {
-      try {
-        return await mockApi.updateMe(partial);
-      } catch (error) {
-        console.error('updateMe error:', error);
-        throw error;
-      }
-    }
-
     try {
       const currentEventId = eventId || await eventContext.getCurrentEventId();
-      const response = await httpClient.patch(API_ENDPOINTS.MOBILE.PROFILE(currentEventId), partial);
+      const userEmail = await storage.getItem('auth_email');
+      
+      if (!userEmail) {
+        return {
+          ok: false,
+          message: 'No authenticated user email found',
+        };
+      }
+
+      // Add email as query parameter instead of in body
+      const endpoint = `${API_ENDPOINTS.MOBILE.PROFILE(currentEventId)}?email=${encodeURIComponent(userEmail)}`;
+      console.log('Making PATCH request to:', endpoint);
+      console.log('Request body:', partial);
+
+      const response = await httpClient.patch(endpoint, partial);
       
       if (response.ok) {
         return {
@@ -505,21 +745,42 @@ export const api = {
           data: response.data,
         };
       } else {
-        throw new Error(response.message || 'Failed to update profile');
+        return {
+          ok: false,
+          message: response.message || 'Failed to update profile',
+        };
       }
     } catch (error) {
       console.error('updateMe error:', error);
-      throw error;
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Failed to update profile',
+      };
     }
   },
 
-  // Helper to get current store state (for debugging and status checking)
-  getStore() {
-    if (USE_MOCKS) {
-      return mockApi.getStore();
+  async getEventDetails(eventId?: string): Promise<ApiResponse> {
+    try {
+      const currentEventId = eventId || await eventContext.getCurrentEventId();
+      const response = await httpClient.get(API_ENDPOINTS.MOBILE.EVENT_DETAILS(currentEventId));
+      
+      if (response.ok) {
+        return {
+          ok: true,
+          data: response.data,
+        };
+      } else {
+        return {
+          ok: false,
+          message: response.message || 'Failed to get event details',
+        };
+      }
+    } catch (error) {
+      console.error('getEventDetails error:', error);
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Failed to get event details',
+      };
     }
-    
-    console.warn('getStore() is only available in mock mode. Real API mode cannot provide mock store state.');
-    return null;
   },
 };

@@ -59,6 +59,33 @@ export const api = {
     return apiClient.del<void>(`/api/admin/events/${id}`);
   },
 
+  async uploadEventImage(id: string, file: File): Promise<{ success: boolean; imageUrl: string; event: EventType }> {
+    const formData = new FormData();
+    formData.append('image', file);
+    
+    // Get auth token
+    const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
+    
+    const headers: HeadersInit = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    // Don't set Content-Type header, let fetch set it automatically for FormData
+    
+    const response = await fetch(`${env.apiUrl}/api/admin/events/${id}/upload-image`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(errorData.message || `HTTP ${response.status}`);
+    }
+    
+    return response.json();
+  },
+
   // Schedule/Itinerary
   async getSchedule(eventId: string): Promise<ItineraryItemType[]> {
     const response = await apiClient.get<{ data: any[] }>(`/api/events/${eventId}/schedule`);

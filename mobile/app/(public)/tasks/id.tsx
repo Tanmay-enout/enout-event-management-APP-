@@ -14,9 +14,11 @@ export default function UploadIdScreen() {
       setIsUploading(true);
       const response = await api.uploadId(file);
       
-      if (response.fileUrl) {
-        setUploadedFileName(file.name);
+      if (response.ok && response.fileUrl) {
+        setUploadedFileName(file.name || file.fileName || 'Document uploaded');
         // Don't navigate automatically - wait for continue button
+      } else {
+        Alert.alert('Error', response.message || 'Failed to upload ID card. Please try again.');
       }
     } catch (error) {
       console.error('Error uploading ID:', error);
@@ -27,8 +29,10 @@ export default function UploadIdScreen() {
   };
 
   const handleContinue = () => {
-    // Navigate back to tasks screen to show completed status
-    router.replace('/(public)/tasks');
+    // Small delay to ensure API updates are reflected
+    setTimeout(() => {
+      router.replace('/(public)/tasks');
+    }, 100);
   };
 
   return (

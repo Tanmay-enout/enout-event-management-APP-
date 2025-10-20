@@ -1,74 +1,103 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useForm, Controller } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '../../src/lib/api';
-import { DEV_CONFIG } from '../../src/lib/config';
-
-// Email validation schema
-const emailSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
-});
-
-type EmailFormData = z.infer<typeof emailSchema>;
 
 export default function EmailScreen() {
   const router = useRouter();
-  const {
-    control,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<EmailFormData>({
-    resolver: zodResolver(emailSchema),
-    defaultValues: {
-      email: '', // Allow any email to be entered
-    },
-  });
+  const [email, setEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const onSubmit = async (data: EmailFormData) => {
+  const handleSubmit = async () => {
+    console.log('=== EMAIL SUBMISSION START ===');
+    console.log('Email being submitted:', email);
+    console.log('Email type:', typeof email);
+    console.log('Email length:', email?.length);
+    
+    // Validate email before sending
+    if (!email || email.trim() === '') {
+      setError('Please enter a valid email address');
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address');
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    setError('');
+    setIsLoading(true);
+
     try {
-      console.log('Submitting email:', data.email);
-      const response = await api.requestEmailOtp({ email: data.email });
-      console.log('API response:', response);
+      console.log('Calling requestEmailOtp with:', { email });
+      const response = await api.requestEmailOtp({ email });
+      console.log('=== API RESPONSE RECEIVED ===');
+      console.log('Raw API response:', response);
+      console.log('response.ok:', response.ok);
+      console.log('response.status:', (response as any)?.status);
+      console.log('response.message:', response.message);
+      console.log('response.inviteStatus:', response.inviteStatus);
       
-      if (response.ok) {
-        console.log('Email accepted, navigating to OTP');
-        // Navigate directly to OTP screen (removing Alert for now)
-        console.log('About to call router.replace with:', {
-          pathname: '/(public)/otp',
-          params: { email: data.email },
-        });
-        router.replace({
-          pathname: '/(public)/otp',
-          params: { email: data.email },
-        });
-        console.log('router.replace called');
-      } else if (response.inviteStatus === 'not_found') {
-        console.log('Email not found, navigating to retry');
-        // Navigate to retry screen
-        router.push({
-          pathname: '/(public)/retry',
-          params: { email: data.email },
-        });
+      // Safe boolean check to prevent casting errors
+      const isResponseOk = Boolean(response?.ok);
+      console.log('isResponseOk (safe boolean):', isResponseOk);
+      
+      if (isResponseOk) {
+        console.log('=== USER EXISTS - NAVIGATING TO OTP ===');
+        // User exists in database, navigate to OTP screen
+        try {
+          router.push({
+            pathname: '/(public)/otp',
+            params: { email },
+          });
+          console.log('Navigation to OTP screen successful');
+        } catch (navError) {
+          console.error('Navigation error:', navError);
+          Alert.alert('Navigation Error', 'Could not navigate to OTP screen. Please try again.');
+        }
       } else {
-        console.log('Unexpected response:', response);
-        Alert.alert('Error', 'Unexpected response from server');
+        console.log('=== API ERROR RESPONSE - SHOWING ALERT ===');
+        console.log('About to show alert with message:', response.message);
+        
+        // Ensure we're not in loading state when showing alert
+        setIsLoading(false);
+        
+        // Use setTimeout to ensure the alert shows after state update
+        setTimeout(() => {
+          Alert.alert(
+            'Error',
+            response.message || 'User with this email does not exist. Please contact the administrator to create an account.',
+            [{ text: 'OK', style: 'default' }],
+            { cancelable: true }
+          );
+        }, 100);
       }
     } catch (error) {
-      console.error('Error in onSubmit:', error);
-      // For dev mode, if API fails, still try to navigate with any email
-      if (DEV_CONFIG.DEV_AUTH_ENABLED) {
-        console.log('DEV MODE: Navigating to OTP despite error with any email');
-        router.replace({
-          pathname: '/(public)/otp',
-          params: { email: data.email },
-        });
-      } else {
-        Alert.alert('Error', 'Something went wrong. Please try again.');
-      }
+      console.log('=== API ERROR - SHOWING ERROR ===');
+      console.error('Error in handleSubmit:', error);
+      
+      // Ensure we're not in loading state when showing alert
+      setIsLoading(false);
+      
+      // Use setTimeout to ensure the alert shows after state update
+      setTimeout(() => {
+        Alert.alert(
+          'Error',
+          'User with this email does not exist. Please contact the administrator to create an account.',
+          [{ text: 'OK', style: 'default' }],
+          { cancelable: true }
+        );
+      }, 100);
+    } finally {
+      setIsLoading(false);
     }
+    
+    console.log('=== EMAIL SUBMISSION END ===');
   };
 
   return (
@@ -81,36 +110,32 @@ export default function EmailScreen() {
         <Text style={styles.subtitle}>Enter your email to continue</Text>
 
         <View style={styles.form}>
-          <Controller
-            control={control}
-            name="email"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={[styles.input, errors.email && styles.inputError]}
-                  placeholder="Enter your email"
-                  placeholderTextColor="#999"
-                  value={value}
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="email-address"
-                  editable={!isSubmitting}
-                />
-                {errors.email && (
-                  <Text style={styles.errorText}>{errors.email.message}</Text>
-                )}
-              </View>
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={[styles.input, error && styles.inputError]}
+              placeholder="Enter your email"
+              placeholderTextColor="#999"
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (error) setError(''); // Clear error when user starts typing
+              }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              editable={!isLoading}
+            />
+            {error && (
+              <Text style={styles.errorText}>{error}</Text>
             )}
-          />
+          </View>
 
           <TouchableOpacity
-            style={[styles.button, isSubmitting && styles.buttonDisabled]}
-            onPress={handleSubmit(onSubmit)}
-            disabled={isSubmitting}
+            style={[styles.button, isLoading && styles.buttonDisabled]}
+            onPress={handleSubmit}
+            disabled={isLoading}
           >
-            {isSubmitting ? (
+            {isLoading ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.buttonText}>Continue</Text>
@@ -119,7 +144,7 @@ export default function EmailScreen() {
         </View>
 
         <Text style={styles.hint}>
-          DEV MODE: Use any email address - OTP is fixed as {DEV_CONFIG.DEV_OTP}
+          Please enter your registered email address to continue.
         </Text>
       </View>
     </KeyboardAvoidingView>

@@ -7,8 +7,12 @@ import {
   Body,
   Param,
   Query,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
   // UseGuards, // Commented out for development
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AdminEventsService } from './admin-events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
@@ -48,5 +52,30 @@ export class AdminEventsController {
   @Delete(':id')
   async remove(@Param('id') id: string) {
     return this.eventsService.remove(id);
+  }
+
+  @Post(':id/upload-image')
+  @UseInterceptors(FileInterceptor('image', {
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB limit for images
+    },
+    fileFilter: (req, file, callback) => {
+      // Only allow image files
+      if (file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+        callback(null, true);
+      } else {
+        callback(new BadRequestException('Only image files are allowed'), false);
+      }
+    },
+  }))
+  async uploadEventImage(
+    @Param('id') id: string,
+    @UploadedFile() file: any,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No image file provided');
+    }
+
+    return this.eventsService.uploadEventImage(id, file);
   }
 }

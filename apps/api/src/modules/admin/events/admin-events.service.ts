@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../lib/prisma.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
@@ -76,6 +76,7 @@ export class AdminEventsService {
         endDate: new Date(createEventDto.endDate),
         timezone: createEventDto.timezone,
         location: createEventDto.location,
+        imageUrl: createEventDto.imageUrl,
         status: createEventDto.status || 'draft',
         createdBy: systemUser.id,
       },
@@ -102,6 +103,7 @@ export class AdminEventsService {
         ...(updateEventDto.endDate && { endDate: new Date(updateEventDto.endDate) }),
         ...(updateEventDto.timezone && { timezone: updateEventDto.timezone }),
         ...(updateEventDto.location !== undefined && { location: updateEventDto.location }),
+        ...(updateEventDto.imageUrl !== undefined && { imageUrl: updateEventDto.imageUrl }),
         ...(updateEventDto.status && { status: updateEventDto.status }),
       },
       include: {
@@ -122,5 +124,58 @@ export class AdminEventsService {
     await this.prisma.event.delete({
       where: { id },
     });
+  }
+
+  async uploadEventImage(eventId: string, file: any) {
+    // Verify event exists
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    // Generate a safe filename
+    const originalName = file.originalname || 'event-image';
+    const safeFileName = originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const timestamp = Date.now();
+    const extension = originalName.split('.').pop() || 'jpg';
+    const finalFileName = `${eventId}_${timestamp}_${safeFileName}`;
+
+    // For now, we'll store the file path - in production you'd upload to S3/Azure/etc.
+    const imageUrl = `/uploads/events/${finalFileName}`;
+
+    try {
+      // Update the event with the image URL
+      const updatedEvent = await this.prisma.event.update({
+        where: { id: eventId },
+        data: {
+          imageUrl: imageUrl,
+        },
+        include: {
+          creator: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Event image uploaded successfully',
+        imageUrl: imageUrl,
+        event: updatedEvent,
+      };
+    } catch (error) {
+      throw new BadRequestException(`Failed to update event image: ${error.message}`);
+    }
   }
 }

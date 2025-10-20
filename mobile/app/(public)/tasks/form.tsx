@@ -42,8 +42,10 @@ export default function RegistrationFormScreen() {
       const response = await api.saveRegistrationForm(data);
       
       if (response.ok) {
-        // Navigate back to tasks screen to show completed status
-        router.replace('/(public)/tasks');
+        // Small delay to ensure API updates are reflected
+        setTimeout(() => {
+          router.replace('/(public)/tasks');
+        }, 100);
       }
     } catch (error) {
       console.error('Error saving registration form:', error);

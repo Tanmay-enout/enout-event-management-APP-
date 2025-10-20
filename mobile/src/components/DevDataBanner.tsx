@@ -4,7 +4,7 @@ import { View, Text, StyleSheet } from 'react-native';
 export function DevDataBanner() {
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Data: MOCKS</Text>
+      <Text style={styles.text}>Data: REAL API</Text>
     </View>
   );
 }

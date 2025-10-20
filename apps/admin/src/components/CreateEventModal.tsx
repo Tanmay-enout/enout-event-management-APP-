@@ -17,6 +17,7 @@ const createEventSchema = z.object({
   endDate: z.string().min(1, 'End date is required'),
   timezone: z.string().min(1, 'Timezone is required'),
   location: z.string().optional(),
+  imageFile: z.any().optional(), // File input
 });
 
 type CreateEventForm = z.infer<typeof createEventSchema>;
@@ -30,6 +31,7 @@ export function CreateEventModal({ onClose, onEventCreated }: CreateEventModalPr
   const router = useRouter();
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   const {
     register,
@@ -59,6 +61,7 @@ export function CreateEventModal({ onClose, onEventCreated }: CreateEventModalPr
         status = 'in_progress';
       }
       
+      // Create event without image first
       const response = await api.createEvent({
         name: data.name,
         startDate: startDate.toISOString(),
@@ -67,6 +70,17 @@ export function CreateEventModal({ onClose, onEventCreated }: CreateEventModalPr
         location: data.location || null,
         status: status,
       });
+      
+      // Upload image if provided
+      if (selectedImageFile) {
+        try {
+          await api.uploadEventImage(response.id, selectedImageFile);
+        } catch (uploadError) {
+          console.warn('Failed to upload image, but event was created:', uploadError);
+          // Don't fail the whole operation if image upload fails
+        }
+      }
+      
       return response;
     },
     onSuccess: (newEvent) => {
@@ -78,6 +92,7 @@ export function CreateEventModal({ onClose, onEventCreated }: CreateEventModalPr
         description: `${newEvent.name} has been created successfully.`,
       });
       reset();
+      setSelectedImageFile(null);
       onClose();
       router.push(`/events/${newEvent.id}/schedule`);
     },
@@ -90,6 +105,11 @@ export function CreateEventModal({ onClose, onEventCreated }: CreateEventModalPr
       });
     },
   });
+
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    setSelectedImageFile(file);
+  };
 
   const onSubmit = async (data: CreateEventForm) => {
     if (isSubmitting) return;
@@ -202,6 +222,24 @@ export function CreateEventModal({ onClose, onEventCreated }: CreateEventModalPr
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
               placeholder="Enter event location"
             />
+          </div>
+
+          <div>
+            <label htmlFor="imageFile" className="block text-sm font-medium text-gray-700 mb-1">
+              Event Image (Optional)
+            </label>
+            <input
+              id="imageFile"
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90"
+            />
+            {selectedImageFile && (
+              <p className="text-sm text-green-600 mt-1">
+                Selected: {selectedImageFile.name}
+              </p>
+            )}
           </div>
 
           <div className="flex gap-3 pt-4">

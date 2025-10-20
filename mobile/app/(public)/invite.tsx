@@ -1,13 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { api } from '../../src/lib/api';
 import { DEV_CONFIG } from '../../src/lib/config';
+import { formatEventDate } from '../../src/lib/time';
 
 export default function InviteScreen() {
   const router = useRouter();
+  const { userEmail, userName, noInvite } = useLocalSearchParams<{ 
+    userEmail?: string; 
+    userName?: string; 
+    noInvite?: string 
+  }>();
   const [loading, setLoading] = useState(true);
   const [invite, setInvite] = useState<any>(null);
+  const [userInfo, setUserInfo] = useState<{ email: string; firstName: string } | null>(null);
+  const [eventDetails, setEventDetails] = useState<any>(null);
 
   useEffect(() => {
     loadInvite();
@@ -15,6 +23,36 @@ export default function InviteScreen() {
 
   const loadInvite = async () => {
     try {
+      // Set user info from route params
+      if (userEmail && userName) {
+        setUserInfo({
+          email: userEmail,
+          firstName: userName,
+        });
+      }
+
+      // Fetch event details first
+      try {
+        const eventResponse = await api.getEventDetails();
+        if (eventResponse.ok) {
+          console.log('Event details loaded:', eventResponse.data);
+          setEventDetails(eventResponse.data);
+        }
+      } catch (eventError) {
+        console.error('Error loading event details:', eventError);
+      }
+
+      // If noInvite is true, show no invite message
+      if (noInvite === 'true') {
+        setInvite({
+          ok: false,
+          inviteStatus: 'not_found',
+          message: 'No invite available for this user',
+        });
+        setLoading(false);
+        return;
+      }
+
       const response = await api.getInvite();
       console.log('Invite response:', response);
       
@@ -26,11 +64,11 @@ export default function InviteScreen() {
           inviteStatus: response.inviteStatus || 'pending',
         });
       } else {
-        // For development, still set a pending invite to show the button
+        // If no invite found, set appropriate status
         setInvite({
-          ok: true,
-          inviteStatus: 'pending',
-          event: response.event,
+          ok: false,
+          inviteStatus: 'not_found',
+          message: response.message || 'No invite found for this user',
         });
       }
     } catch (error) {
@@ -49,15 +87,20 @@ export default function InviteScreen() {
   const handleAcceptInvite = async () => {
     try {
       setLoading(true);
-      console.log('Accepting invite...');
-      await api.acceptInvite();
-      console.log('Invite accepted, navigating to tasks...');
-      // Navigate directly without Alert for better web compatibility
-      router.replace('/(public)/tasks');
+      console.log('Accepting invite for user:', displayName);
+      const response = await api.acceptInvite();
+      
+      if (response.ok) {
+        console.log('Invite accepted successfully, navigating to tasks...');
+        
+        // Navigate directly to tasks screen - the backend has updated the status
+        router.replace('/(public)/tasks');
+      } else {
+        throw new Error(response.message || 'Failed to accept invite');
+      }
     } catch (error) {
       console.error('Error accepting invite:', error);
       Alert.alert('Error', 'Failed to accept invite. Please try again.');
-    } finally {
       setLoading(false);
     }
   };
@@ -67,6 +110,42 @@ export default function InviteScreen() {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#F9B24E" />
         <Text style={styles.loadingText}>Loading invite...</Text>
+      </View>
+    );
+  }
+
+  // Get display name and initials
+  const displayName = userInfo?.firstName || userName || userEmail?.split('@')[0] || 'User';
+  const initials = displayName.substring(0, 2).toUpperCase();
+
+  // Handle no invite case
+  if (invite && invite.inviteStatus === 'not_found') {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.greetingContainer}>
+            <Text style={styles.greeting}>Hi, {displayName} 👋</Text>
+          </View>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
+        </View>
+        
+        <View style={styles.contentContainer}>
+          <View style={styles.titleContainer}>
+            <Text style={styles.invitationTitle}>No Invite Available</Text>
+            <Text style={styles.subtitle}>There are no pending invites for your email address.</Text>
+          </View>
+          
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={styles.continueButton}
+              onPress={() => router.replace('/(app)/inbox')}
+            >
+              <Text style={styles.continueButtonText}>Go to App</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     );
   }
@@ -90,10 +169,10 @@ export default function InviteScreen() {
       {/* Header with greeting and avatar */}
       <View style={styles.header}>
         <View style={styles.greetingContainer}>
-          <Text style={styles.greeting}>Hi, Tanmay 👋</Text>
+          <Text style={styles.greeting}>Hi, {displayName} 👋</Text>
         </View>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>TM</Text>
+          <Text style={styles.avatarText}>{initials}</Text>
         </View>
       </View>
 
@@ -105,18 +184,18 @@ export default function InviteScreen() {
           <Text style={styles.subtitle}>Get ready for an amazing adventure!</Text>
         </View>
 
-        {/* Offsite location photo with fun frame */}
+        {/* Event photo with fun frame */}
         <View style={styles.imageContainer}>
           <View style={styles.imageFrame}>
             <Image
               source={{
-                uri: 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=400&h=300&fit=crop'
+                uri: eventDetails?.imageUrl || 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=400&h=300&fit=crop'
               }}
               style={styles.offsiteImage}
               resizeMode="cover"
             />
             <View style={styles.imageOverlay}>
-              <Text style={styles.imageText}>🏖️ Paradise Awaits! 🏖️</Text>
+              <Text style={styles.imageText}>🎉 {eventDetails?.name || 'Event'} 🎉</Text>
             </View>
           </View>
         </View>
@@ -124,8 +203,10 @@ export default function InviteScreen() {
         {/* Event details with fun styling */}
         <View style={styles.eventDetails}>
           <View style={styles.eventTitleContainer}>
-            <Text style={styles.eventTitle}>Brevo Phuket Offsite</Text>
-            <Text style={styles.eventSubtitle}>Team Building & Adventure</Text>
+            <Text style={styles.eventTitle}>{eventDetails?.name || 'Event'}</Text>
+            <Text style={styles.eventSubtitle}>
+              {eventDetails?.location ? `📍 ${eventDetails.location}` : 'Team Building & Adventure'}
+            </Text>
           </View>
           
           <View style={styles.detailsCard}>
@@ -133,7 +214,9 @@ export default function InviteScreen() {
               <Text style={styles.detailIcon}>📅</Text>
               <View style={styles.detailContent}>
                 <Text style={styles.detailLabel}>From: </Text>
-                <Text style={styles.detailValue}>20 July 2025</Text>
+                <Text style={styles.detailValue}>
+                  {eventDetails?.startDate ? formatEventDate(eventDetails.startDate) : 'Date TBC'}
+                </Text>
               </View>
             </View>
             
@@ -141,7 +224,9 @@ export default function InviteScreen() {
               <Text style={styles.detailIcon}>📅</Text>
               <View style={styles.detailContent}>
                 <Text style={styles.detailLabel}>To: </Text>
-                <Text style={styles.detailValue}>22 July 2025</Text>
+                <Text style={styles.detailValue}>
+                  {eventDetails?.endDate ? formatEventDate(eventDetails.endDate) : 'Date TBC'}
+                </Text>
               </View>
             </View>
             
@@ -149,7 +234,9 @@ export default function InviteScreen() {
               <Text style={styles.detailIcon}>📍</Text>
               <View style={styles.detailContent}>
                 <Text style={styles.detailLabel}>Location: </Text>
-                <Text style={styles.detailValue}>Thailand 🇹🇭</Text>
+                <Text style={styles.detailValue}>
+                  {eventDetails?.location || 'Location TBC'}
+                </Text>
               </View>
             </View>
           </View>
@@ -181,8 +268,8 @@ export default function InviteScreen() {
             onPress={() => router.replace('/(public)/tasks')}
           >
             <View style={styles.buttonContent}>
-              <Text style={styles.continueButtonText}>🚀 Continue to Registration 🚀</Text>
-              <Text style={styles.buttonSubtext}>Complete your setup!</Text>
+              <Text style={styles.continueButtonText}>🚀 Continue to Tasks 🚀</Text>
+              <Text style={styles.buttonSubtext}>You've already accepted the invite!</Text>
             </View>
           </TouchableOpacity>
         )}

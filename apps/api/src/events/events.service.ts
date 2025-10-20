@@ -15,6 +15,7 @@ export class EventsService {
         timezone: true,
         status: true,
         location: true,
+        imageUrl: true,
         createdAt: true,
         updatedAt: true,
         _count: {

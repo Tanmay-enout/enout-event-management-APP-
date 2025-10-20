@@ -6,7 +6,8 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
+    "scheme": "enout-mobile",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -30,12 +31,7 @@
       "tool": "expo-cli"
     },
     "plugins": [
-      [
-        "expo-router",
-        {
-          "origin": false
-        }
-      ]
+      "expo-router"
     ]
   }
 }

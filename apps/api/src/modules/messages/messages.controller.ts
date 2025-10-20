@@ -95,6 +95,17 @@ export class MessagesController {
     await this.messagesService.deleteMessage(eventId, id);
   }
 
+  @Post(':id/send')
+  @ApiOperation({ summary: 'Send a message to all attendees' })
+  @ApiResponse({ status: 200, type: MessageDto })
+  async sendMessage(
+    @Param('eventId') eventId: string,
+    @Param('id') id: string,
+  ): Promise<MessageDto> {
+    const message = await this.messagesService.sendMessage(eventId, id);
+    return this.transformToDto(message);
+  }
+
   private transformToDto(message: any): MessageDto {
     return {
       id: message.id,

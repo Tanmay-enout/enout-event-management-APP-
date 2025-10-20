@@ -40,9 +40,13 @@ export default function MessageDetailScreen() {
           text: apiData.body || apiData.text || '',
           attachments: apiData.attachments || [],
         });
-      } else if (response.subject) {
+      } else if ((response as any).subject) {
         // Old mock format
-        setMessage(response);
+        setMessage({
+          subject: (response as any).subject || 'No Subject',
+          text: (response as any).text || '',
+          attachments: (response as any).attachments || [],
+        });
       } else {
         throw new Error('Invalid response format');
       }

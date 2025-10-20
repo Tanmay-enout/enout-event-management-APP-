@@ -8,15 +8,16 @@ interface Profile {
   email: string;
   firstName: string;
   lastName: string;
-  phone: string;
-  role: string;
-  workEmail: string;
-  company: string;
-  dietaryRequirements: string;
-  emergencyContact: string;
-  location: string;
-  gender: string;
-  idCardUrl: string | null;
+  phone?: string;
+  role?: string;
+  workEmail?: string;
+  company?: string;
+  dietaryRequirements?: string;
+  emergencyContact?: string;
+  location?: string;
+  gender?: string;
+  idDocUrl?: string; // Note: API returns idDocUrl, not idCardUrl
+  phoneVerified?: boolean;
 }
 
 export default function ProfileScreen() {
@@ -30,21 +31,43 @@ export default function ProfileScreen() {
 
   const loadProfile = async () => {
     try {
+      console.log('Loading profile...');
       const response = await api.getMe();
       
-      // Handle both old mock response and new API response format
+      console.log('Profile API response:', response);
+      
       if (response.ok && response.data) {
-        // New API format
-        setProfile(response.data);
-      } else if (response.email || response.firstName) {
-        // Old mock format - direct response
-        setProfile(response);
+        // New API format - map the response data properly
+        const apiData = response.data as any;
+        console.log('Profile data from API:', apiData);
+        
+        // Ensure we have the required fields
+        const mappedProfile: Profile = {
+          id: apiData.id || '',
+          email: apiData.email || '',
+          firstName: apiData.firstName || '',
+          lastName: apiData.lastName || '',
+          phone: apiData.phone,
+          workEmail: apiData.workEmail,
+          location: apiData.location,
+          gender: apiData.gender,
+          dietaryRequirements: apiData.dietaryRequirements,
+          idDocUrl: apiData.idDocUrl,
+          phoneVerified: apiData.phoneVerified,
+          // Fields not in API - set defaults
+          role: 'attendee',
+          company: undefined,
+          emergencyContact: undefined,
+        };
+        
+        setProfile(mappedProfile);
       } else {
-        throw new Error('Invalid response format');
+        console.error('Profile API response not OK:', response.message);
+        Alert.alert('Error', response.message || 'Failed to load profile');
       }
     } catch (error) {
       console.error('Error loading profile:', error);
-      Alert.alert('Error', 'Failed to load profile');
+      Alert.alert('Error', 'Failed to load profile data');
     } finally {
       setLoading(false);
     }
@@ -115,7 +138,7 @@ export default function ProfileScreen() {
             : profile.email || 'User'}
         </Text>
         <Text style={styles.email}>{profile.email || 'Email not provided'}</Text>
-        <Text style={styles.role}>{profile.role.toUpperCase()}</Text>
+        <Text style={styles.role}>{(profile.role || 'ATTENDEE').toUpperCase()}</Text>
       </View>
 
       <View style={styles.section}>
@@ -159,7 +182,7 @@ export default function ProfileScreen() {
         <View style={styles.infoItem}>
           <Text style={styles.infoLabel}>ID Card</Text>
           <Text style={styles.infoValue}>
-            {profile.idCardUrl ? '✅ Uploaded' : '❌ Not uploaded'}
+            {profile.idDocUrl ? '✅ Uploaded' : '❌ Not uploaded'}
           </Text>
         </View>
       </View>

@@ -28,5 +28,9 @@ export class CreateEventDto {
 
   @IsString()
   @IsOptional()
+  imageUrl?: string;
+
+  @IsString()
+  @IsOptional()
   status?: string = EventStatus.DRAFT;
 }

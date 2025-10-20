@@ -5,13 +5,18 @@ import { api } from '../../../src/lib/api';
 
 interface Message {
   id: string;
-  subject: string;
-  snippet: string;
-  sentAt: string;
+  title: string; // API returns 'title' not 'subject'
+  body: string; // API returns 'body' not 'snippet'
+  createdAt: string; // API returns 'createdAt' not 'sentAt'
   unread: boolean;
-  attachmentsCount: number;
-  sender: string;
-  avatar: string;
+  attachments?: Record<string, any>; // API returns 'attachments' object
+  // Computed fields for display
+  subject?: string;
+  snippet?: string;
+  sentAt?: string;
+  attachmentsCount?: number;
+  sender?: string;
+  avatar?: string;
 }
 
 export default function InboxScreen() {
@@ -26,23 +31,42 @@ export default function InboxScreen() {
 
   const loadMessages = async () => {
     try {
+      console.log('Loading messages...');
       const response = await api.listMessages();
       
-      // Handle both old mock response and new API response format
-      let messagesData = null;
-      if (response.ok) {
-        // New API format
-        messagesData = response.items || response.data?.data || [];
-      } else if (response.items) {
-        // Old mock format
-        messagesData = response.items;
-      }
+      console.log('Messages API response:', response);
       
-      if (messagesData && Array.isArray(messagesData)) {
-        setMessages(messagesData);
+      if (response.ok && response.data) {
+        // New API format - map the response data properly
+        const apiData = response.data as any;
+        const rawMessages = apiData.data || apiData || [];
+        
+        // Map API message format to UI format
+        const mappedMessages: Message[] = rawMessages.map((msg: any) => ({
+          id: msg.id || '',
+          title: msg.title || '',
+          body: msg.body || '',
+          createdAt: msg.createdAt || '',
+          unread: msg.unread || false,
+          attachments: msg.attachments || {},
+          // Map to display fields
+          subject: msg.title || '',
+          snippet: msg.body || '',
+          sentAt: msg.createdAt ? new Date(msg.createdAt).toLocaleString() : '',
+          attachmentsCount: msg.attachments ? Object.keys(msg.attachments).length : 0,
+          sender: 'Event Organizer', // Default sender for now
+          avatar: 'E',
+        }));
+        
+        console.log('Mapped messages:', mappedMessages);
+        setMessages(mappedMessages);
+      } else {
+        console.error('Messages API response not OK:', response.message);
+        setMessages([]);
       }
     } catch (error) {
       console.error('Error loading messages:', error);
+      setMessages([]);
     } finally {
       setLoading(false);
     }

@@ -6,11 +6,13 @@ import { ScheduleList } from '../../../src/components/ScheduleList';
 
 interface ScheduleItem {
   id: string;
-  start: string;
-  end: string;
+  start: Date | string;
+  end: Date | string;
   title: string;
-  location: string;
-  notes?: string;
+  location?: string | null;
+  notes?: string | null;
+  color?: string | null;
+  allDay: boolean;
 }
 
 export default function ScheduleScreen() {
@@ -25,22 +27,37 @@ export default function ScheduleScreen() {
 
   const loadSchedule = async () => {
     try {
+      console.log('Loading schedule...');
       const response = await api.getSchedule();
       
-      // Handle both old mock response and new API response format
-      let scheduleData = null;
-      if (response.ok && response.data) {
-        scheduleData = Array.isArray(response.data) ? response.data : response.data.data || [];
-      } else if (Array.isArray(response)) {
-        // Fallback for mock format
-        scheduleData = response;
-      }
+      console.log('Schedule API response:', response);
       
-      if (scheduleData && Array.isArray(scheduleData)) {
-        setSchedule(scheduleData);
+      if (response.ok && response.data) {
+        // New API format - map the response data properly
+        const apiData = response.data as any;
+        const rawSchedule = apiData.data || apiData || [];
+        
+        // Map API schedule format to UI format
+        const mappedSchedule: ScheduleItem[] = rawSchedule.map((item: any) => ({
+          id: item.id || '',
+          start: item.start || new Date(),
+          end: item.end || new Date(),
+          title: item.title || '',
+          location: item.location || null,
+          notes: item.notes || null,
+          color: item.color || null,
+          allDay: item.allDay || false,
+        }));
+        
+        console.log('Mapped schedule:', mappedSchedule);
+        setSchedule(mappedSchedule);
+      } else {
+        console.error('Schedule API response not OK:', response.message);
+        setSchedule([]);
       }
     } catch (error) {
       console.error('Error loading schedule:', error);
+      setSchedule([]);
     } finally {
       setLoading(false);
     }

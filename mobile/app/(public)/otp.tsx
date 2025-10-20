@@ -41,18 +41,38 @@ export default function OtpScreen() {
       
       if (response.ok) {
         console.log('OTP Screen: Email verified, inviteStatus:', response.inviteStatus);
+        console.log('OTP Screen: User info:', response.user);
         
-        // Navigate directly without Alert for testing
-        console.log('OTP Screen: Navigating directly...');
+        // Store user information for use in other screens
+        if (response.user) {
+          // Store user data for the invite screen and other screens
+          // In a real app, you might want to store this in a context or global state
+        }
+        
+        // Navigate based on invite status
+        console.log('OTP Screen: Navigating based on invite status...');
         if (response.inviteStatus === 'pending') {
           console.log('OTP Screen: Navigating to invite screen');
-          router.push('/invite');
+          router.push({
+            pathname: '/(public)/invite',
+            params: { 
+              userEmail: email,
+              userName: response.user?.firstName || email?.split('@')[0] || 'User'
+            }
+          });
         } else if (response.inviteStatus === 'accepted') {
           console.log('OTP Screen: Navigating to tasks screen');
-          router.push('/tasks');
+          router.push('/(public)/tasks');
         } else {
-          console.log('OTP Screen: Navigating to splash screen');
-          router.push('/splash');
+          console.log('OTP Screen: No invite found, showing appropriate screen');
+          router.push({
+            pathname: '/(public)/invite',
+            params: { 
+              userEmail: email,
+              userName: response.user?.firstName || email?.split('@')[0] || 'User',
+              noInvite: 'true'
+            }
+          });
         }
       }
     } catch (error) {
@@ -60,7 +80,7 @@ export default function OtpScreen() {
       // For dev mode, if API fails, still try to navigate with any email and fixed OTP
       if (DEV_CONFIG.DEV_AUTH_ENABLED && data.code === DEV_CONFIG.DEV_OTP) {
         console.log('DEV MODE: Navigating despite error - using any email with fixed OTP');
-        router.push('/invite'); // Navigate to invite screen as fallback
+        router.push('/(public)/invite'); // Navigate to invite screen as fallback
       } else {
         if (error instanceof Error) {
           Alert.alert('Error', error.message);

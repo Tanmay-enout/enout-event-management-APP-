@@ -25,10 +25,21 @@ class HttpClient {
       const url = `${this.baseURL}${endpoint}`;
       const headers = await this.getAuthHeaders();
       
+      // Don't set Content-Type for FormData - let the browser set it with boundary
+      const isFormData = options.body instanceof FormData;
+      const defaultHeaders: Record<string, string> = {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        ...headers,
+      };
+
+      if (!isFormData) {
+        defaultHeaders['Content-Type'] = 'application/json';
+      }
+
       const config: RequestInit = {
         headers: {
-          'Content-Type': 'application/json',
-          ...headers,
+          ...defaultHeaders,
           ...options.headers,
         },
         ...options,
@@ -39,7 +50,10 @@ class HttpClient {
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
       config.signal = controller.signal;
 
-      console.log(`Making ${options.method || 'GET'} request to: ${url}`);
+      console.log(`=== HTTP REQUEST ===`);
+      console.log(`Method: ${options.method || 'GET'}`);
+      console.log(`URL: ${url}`);
+      console.log(`Base URL: ${this.baseURL}`);
       
       const response = await fetch(url, config);
       clearTimeout(timeoutId);
@@ -53,8 +67,10 @@ class HttpClient {
       }
 
       console.log(`Response (${response.status}):`, data);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
+        console.log('Response not ok, returning error response');
         return {
           ok: false,
           message: data?.message || data || `HTTP ${response.status}`,
@@ -62,6 +78,7 @@ class HttpClient {
         };
       }
 
+      console.log('Response ok, returning success response with data:', data);
       return {
         ok: true,
         data,
@@ -90,10 +107,18 @@ class HttpClient {
     return this.makeRequest<T>(endpoint, { method: 'GET' });
   }
 
-  async post<T>(endpoint: string, data?: any): Promise<HttpResponse<T>> {
+  async post<T>(endpoint: string, data?: any, options?: RequestInit): Promise<HttpResponse<T>> {
+    let body;
+    if (data instanceof FormData) {
+      body = data;
+    } else if (data) {
+      body = JSON.stringify(data);
+    }
+    
     return this.makeRequest<T>(endpoint, {
       method: 'POST',
-      body: data ? JSON.stringify(data) : undefined,
+      body,
+      ...options,
     });
   }
 

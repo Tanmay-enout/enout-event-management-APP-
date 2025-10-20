@@ -2,9 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { api } from '../../../src/lib/api';
+import { storage } from '../../../src/lib/storage';
 
 export default function TasksScreen() {
   const router = useRouter();
+  const [userInfo, setUserInfo] = useState<{ firstName: string; email: string } | null>(null);
+  const [currentProfile, setCurrentProfile] = useState<any>(null);
+  const [userVerifiedPhone, setUserVerifiedPhone] = useState<boolean>(false);
   const [tasks, setTasks] = useState([
     {
       id: 'id',
@@ -32,43 +36,140 @@ export default function TasksScreen() {
     }
   ]);
 
-  // Check task completion status when screen focuses
+  // Load user info and check task completion status when screen focuses
   useFocusEffect(
     React.useCallback(() => {
-      checkTaskStatus();
+      loadUserInfo();
+      // Add small delay to ensure any previous API calls have completed
+      setTimeout(() => {
+        checkTaskStatus();
+      }, 500);
     }, [])
   );
 
+  const loadUserInfo = async () => {
+    try {
+      const userEmail = await storage.getItem('auth_email');
+      if (userEmail) {
+        const userResponse = await api.getUserInfo();
+        if (userResponse.ok && userResponse.user) {
+          setUserInfo({
+            firstName: userResponse.user.firstName || userEmail.split('@')[0],
+            email: userEmail,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user info:', error);
+    }
+  };
+
   const checkTaskStatus = async () => {
     try {
-      // Get current store state to check task completion
-      const store = api.getStore?.() || {};
-      const updatedTasks = tasks.map(task => {
-        if (task.id === 'id' && store.tasks?.idUpload === 'done') {
-          return { ...task, status: 'completed' };
-        }
-        if (task.id === 'form' && store.tasks?.form === 'done') {
-          return { ...task, status: 'completed' };
-        }
-        if (task.id === 'phone-input' && store.tasks?.phone === 'done') {
-          return { ...task, status: 'completed' };
-        }
-        return task;
+      // Get actual profile data from API to check task completion
+      const profileResponse = await api.getMe();
+      
+      console.log('=== TASK STATUS CHECK DEBUG ===');
+      console.log('Profile response:', profileResponse);
+      console.log('Profile response ok:', profileResponse.ok);
+      console.log('Profile response data:', profileResponse.data);
+      
+      if (!profileResponse.ok) {
+        console.error('Failed to get profile data - response not ok:', profileResponse.message);
+        return;
+      }
+      
+      if (!profileResponse.data) {
+        console.error('Failed to get profile data - no data in response');
+        return;
+      }
+      
+      const profile = profileResponse.data as any;
+      setCurrentProfile(profile); // Store profile data for use in handleTaskPress
+      console.log('Full profile object:', profile);
+      console.log('Checking task status with profile data:', {
+        idDocUrl: profile.idDocUrl,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        gender: profile.gender,
+        phoneVerified: profile.phoneVerified,
+        phone: profile.phone
       });
-      setTasks(updatedTasks);
+      
+      // Check if user has verified phone through mobile app
+      const userVerifiedPhoneFlag = await storage.getItem('user_verified_phone');
+      const hasUserVerifiedPhone = userVerifiedPhoneFlag === 'true';
+      setUserVerifiedPhone(hasUserVerifiedPhone);
+      
+      console.log('Phone verification status:', {
+        userVerifiedPhoneFlag: userVerifiedPhoneFlag,
+        hasUserVerifiedPhone: hasUserVerifiedPhone,
+        profilePhoneVerified: profile.phoneVerified,
+        willIgnoreAdminVerification: profile.phoneVerified && !hasUserVerifiedPhone
+      });
+      
+      // Use the current tasks state to avoid closure issues
+      setTasks(currentTasks => {
+        const updatedTasks = currentTasks.map(task => {
+        if (task.id === 'id') {
+          // Check if ID document has been uploaded
+          const idUploaded = profile.idDocUrl && profile.idDocUrl.trim() !== '';
+          console.log(`ID upload task: ${idUploaded ? 'completed' : 'pending'} (url: ${profile.idDocUrl})`);
+          return { ...task, status: idUploaded ? 'completed' : 'pending' };
+        }
+        
+        if (task.id === 'form') {
+          // Check if registration form is completed (has required fields filled)
+          const formCompleted = profile.firstName && 
+                              profile.lastName && 
+                              profile.firstName.trim() !== '' && 
+                              profile.lastName.trim() !== '' &&
+                              profile.gender && 
+                              profile.gender.trim() !== '';
+          console.log(`Form task: ${formCompleted ? 'completed' : 'pending'} (firstName: ${profile.firstName}, lastName: ${profile.lastName}, gender: ${profile.gender})`);
+          return { ...task, status: formCompleted ? 'completed' : 'pending' };
+        }
+        
+        if (task.id === 'phone-input') {
+          // Check if phone verification was completed through mobile app
+          const phoneVerified = hasUserVerifiedPhone;
+          console.log(`Phone verification task: ${phoneVerified ? 'completed' : 'pending'} (userVerifiedPhone: ${hasUserVerifiedPhone})`);
+          return { ...task, status: phoneVerified ? 'completed' : 'pending' };
+        }
+        
+        return task;
+        });
+        
+        return updatedTasks;
+      });
     } catch (error) {
       console.error('Error checking task status:', error);
     }
   };
 
-  // Check if all tasks are completed
+  // Check if all tasks are completed (same logic for all tasks now)
   const allTasksCompleted = tasks.every(task => task.status === 'completed');
 
   const handleTaskPress = (taskId: string) => {
+    console.log('=== TASK PRESS DEBUG ===');
+    console.log('Task ID:', taskId);
+    console.log('Current profile:', currentProfile);
+    console.log('Tasks:', tasks);
+    
+    // Don't allow navigation to completed tasks (same logic for all tasks including phone)
+    const task = tasks.find(t => t.id === taskId);
+    if (task && task.status === 'completed') {
+      console.log('Task is completed, not allowing navigation:', taskId);
+      return; // Do nothing if task is completed
+    }
+    
+    // Default navigation for all tasks
+    console.log('Default navigation for task:', taskId);
     router.push(`/(public)/tasks/${taskId}`);
   };
 
   const handleContinueToApp = () => {
+    // Navigate to the main app - using inbox as the home screen for now
     router.replace('/(app)/inbox');
   };
 
@@ -76,9 +177,13 @@ export default function TasksScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.greeting}>Hi, Tanmay 👋</Text>
+        <Text style={styles.greeting}>
+          Hi, {userInfo?.firstName || 'User'} 👋
+        </Text>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>TM</Text>
+          <Text style={styles.avatarText}>
+            {userInfo ? userInfo.firstName.substring(0, 2).toUpperCase() : 'U'}
+          </Text>
         </View>
       </View>
 
@@ -91,35 +196,47 @@ export default function TasksScreen() {
 
       {/* Task Details */}
       <ScrollView style={styles.content}>
-        {tasks.map((task) => (
-          <TouchableOpacity
-            key={task.id}
-            style={[
-              styles.taskCard,
-              task.status === 'completed' && styles.completedCard
-            ]}
-            onPress={() => handleTaskPress(task.id)}
-          >
-            <View style={styles.taskHeader}>
-              <Text style={styles.taskIcon}>{task.icon}</Text>
-              <View style={styles.taskInfo}>
-                <Text style={styles.taskTitle}>{task.title}</Text>
-                <Text style={styles.taskDescription}>{task.description}</Text>
+        {tasks.map((task) => {
+          // Disable task if it's completed (same logic for all tasks including phone)
+          const isTaskDisabled = task.status === 'completed';
+          
+          return (
+            <TouchableOpacity
+              key={task.id}
+              style={[
+                styles.taskCard,
+                task.status === 'completed' && styles.completedCard,
+                isTaskDisabled && styles.disabledCard
+              ]}
+              onPress={() => handleTaskPress(task.id)}
+              disabled={isTaskDisabled}
+            >
+              <View style={styles.taskHeader}>
+                <Text style={styles.taskIcon}>{task.icon}</Text>
+                <View style={styles.taskInfo}>
+                  <Text style={styles.taskTitle}>{task.title}</Text>
+                  <Text style={styles.taskDescription}>{task.description}</Text>
+                </View>
+                {task.status !== 'completed' && (
+                  <Text style={styles.arrow}>›</Text>
+                )}
+                {task.status === 'completed' && (
+                  <Text style={styles.checkIcon}>✓</Text>
+                )}
               </View>
-              <Text style={styles.arrow}>›</Text>
-            </View>
-            
-            <View style={styles.taskFooter}>
-              <Text style={styles.dueDate}>Complete by: {task.dueDate}</Text>
-              {task.status === 'pending' && (
-                <Text style={styles.dueSoon}>Due soon</Text>
-              )}
-              {task.status === 'completed' && (
-                <Text style={styles.completed}>Completed</Text>
-              )}
-            </View>
-          </TouchableOpacity>
-        ))}
+              
+              <View style={styles.taskFooter}>
+                <Text style={styles.dueDate}>Complete by: {task.dueDate}</Text>
+                {task.status === 'pending' && (
+                  <Text style={styles.dueSoon}>Due soon</Text>
+                )}
+                {task.status === 'completed' && (
+                  <Text style={styles.completed}>Completed</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
       {/* Continue Button - Only show when all tasks are completed */}
@@ -129,7 +246,7 @@ export default function TasksScreen() {
             style={styles.continueButton}
             onPress={handleContinueToApp}
           >
-            <Text style={styles.continueButtonText}>Continue to App</Text>
+            <Text style={styles.continueButtonText}>Go to Home</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -212,6 +329,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#d4edda',
     borderColor: '#28a745',
   },
+  disabledCard: {
+    opacity: 0.7,
+    borderStyle: 'solid',
+  },
   taskHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -237,6 +358,11 @@ const styles = StyleSheet.create({
   arrow: {
     fontSize: 24,
     color: '#6c757d',
+    fontWeight: 'bold',
+  },
+  checkIcon: {
+    fontSize: 24,
+    color: '#28a745',
     fontWeight: 'bold',
   },
   taskFooter: {
