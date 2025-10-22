@@ -54,6 +54,7 @@ class HttpClient {
       console.log(`Method: ${options.method || 'GET'}`);
       console.log(`URL: ${url}`);
       console.log(`Base URL: ${this.baseURL}`);
+      console.log(`Headers:`, config.headers);
       
       const response = await fetch(url, config);
       clearTimeout(timeoutId);
@@ -68,6 +69,21 @@ class HttpClient {
 
       console.log(`Response (${response.status}):`, data);
       console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+      // Handle 401 Unauthorized responses
+      if (response.status === 401) {
+        console.log('Received 401 Unauthorized - clearing auth token');
+        // Clear the stored token and redirect to login
+        await storage.removeItem('auth_token');
+        await storage.removeItem('auth_email');
+        
+        // Return special response for 401 to allow UI to handle navigation
+        return {
+          ok: false,
+          message: 'Authentication required',
+          status: 401,
+        };
+      }
 
       if (!response.ok) {
         console.log('Response not ok, returning error response');

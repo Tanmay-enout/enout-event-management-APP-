@@ -7,6 +7,7 @@ interface ApiResponse<T = unknown> {
   ok: boolean;
   message?: string;
   data?: any;
+  status?: number;
   inviteStatus?: string;
   token?: string;
   user?: {
@@ -123,40 +124,34 @@ export const api = {
   },
 
   async verifyEmail(params: { email: string; code: string }): Promise<ApiResponse> {
-    // Development auth bypass - accept any email with fixed OTP
-    if (isDevAuthEnabled() && params.code === DEV_CONFIG.DEV_OTP) {
-      console.log('DEV MODE: Accepting any email with fixed OTP verification:', params.email, params.code);
-      
-      // Store dev token and email for future authenticated requests
-      const devToken = 'dev-token-' + Date.now();
-      await storage.setItem('auth_token', devToken);
-      await storage.setItem('auth_email', params.email);
-      
-      // Get user info and invite status after successful verification
-      const userInfo = await this.getUserInfo();
-      const inviteInfo = await this.getInvite();
-      
-      return {
-        ok: true,
-        message: 'Email verified successfully (dev mode)',
-        token: devToken,
-        user: userInfo.ok ? userInfo.user : undefined,
-        inviteStatus: inviteInfo.inviteStatus || 'pending',
-        invite: inviteInfo.invite || null,
-      };
-    }
+    // Always use real API for verification to get proper JWT tokens
+    // This ensures authentication works correctly with the backend
 
     try {
+      console.log('=== verifyEmail Starting ===');
+      console.log('Calling endpoint:', API_ENDPOINTS.AUTH.VERIFY_OTP);
+      console.log('With data:', { email: params.email, otp: params.code });
+      
       const response = await httpClient.post(API_ENDPOINTS.AUTH.VERIFY_OTP, {
         email: params.email,
         otp: params.code,
       });
 
+      console.log('=== verifyEmail API Response ===');
+      console.log('Response object:', response);
+      console.log('Response ok:', response.ok);
+      console.log('Response status:', response.status);
+      console.log('Response data:', response.data);
+      
       const responseData = response.data as any;
+      console.log('Access token exists:', !!responseData?.access_token);
+      
       if (response.ok && responseData?.access_token) {
         // Store the token and email for future authenticated requests
+        console.log('Storing JWT token:', responseData.access_token.substring(0, 20) + '...');
         await storage.setItem('auth_token', responseData.access_token);
         await storage.setItem('auth_email', params.email);
+        console.log('Token stored successfully');
         
         // Get user info and invite status after successful verification
         const userInfo = await this.getUserInfo();
@@ -171,10 +166,16 @@ export const api = {
           invite: inviteInfo.invite || null,
         };
       } else {
-        throw new Error(response.message || 'Invalid OTP');
+        console.log('=== verifyEmail Failed ===');
+        console.log('Response not ok:', response);
+        console.log('Response message:', response.message);
+        console.log('No access_token in response');
+        throw new Error(response.message || 'Invalid OTP - no access token received');
       }
     } catch (error) {
-      console.error('verifyEmail error:', error);
+      console.error('=== verifyEmail Error ===');
+      console.error('Error details:', error);
+      console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
       throw error;
     }
   },
@@ -322,16 +323,18 @@ export const api = {
   async uploadId(file: any): Promise<ApiResponse> {
     try {
       const currentEventId = await eventContext.getCurrentEventId();
-      const userEmail = await storage.getItem('auth_email');
       
-      if (!userEmail) {
+      // Check if we have a token (authentication required now)
+      const token = await storage.getItem('auth_token');
+      if (!token) {
         return {
           ok: false,
-          message: 'No authenticated user email found',
+          message: 'Authentication required',
+          status: 401,
         };
       }
 
-      console.log('Uploading document for user:', userEmail, 'event:', currentEventId);
+      console.log('Uploading document for event:', currentEventId);
 
       // Create FormData for file upload
       const formData = new FormData();
@@ -346,9 +349,17 @@ export const api = {
         type: fileType,
         name: finalFileName,
       } as any);
-      formData.append('email', userEmail);
+      // Remove email from formData - backend will use authenticated user context
 
       const response = await httpClient.post(API_ENDPOINTS.MOBILE.UPLOAD_DOCUMENT(currentEventId), formData);
+
+      if (response.status === 401) {
+        return {
+          ok: false,
+          message: 'Authentication required',
+          status: 401,
+        };
+      }
 
       if (response.ok) {
         const responseData = response.data as any;
@@ -520,16 +531,26 @@ export const api = {
   async listMessages(eventId?: string): Promise<ApiResponse> {
     try {
       const currentEventId = eventId || await eventContext.getCurrentEventId();
-      const userEmail = await storage.getItem('auth_email');
       
-      if (!userEmail) {
+      // Check if we have a token (authentication required now)
+      const token = await storage.getItem('auth_token');
+      if (!token) {
         return {
           ok: false,
-          message: 'No authenticated user email found',
+          message: 'Authentication required',
+          status: 401,
         };
       }
 
-      const response = await httpClient.get(`${API_ENDPOINTS.MOBILE.MESSAGES(currentEventId)}?email=${encodeURIComponent(userEmail)}`);
+      const response = await httpClient.get(API_ENDPOINTS.MOBILE.MESSAGES(currentEventId));
+      
+      if (response.status === 401) {
+        return {
+          ok: false,
+          message: 'Authentication required',
+          status: 401,
+        };
+      }
       
       if (response.ok) {
         // Map API response to expected format
@@ -558,7 +579,26 @@ export const api = {
   async getMessage(id: string, eventId?: string): Promise<ApiResponse> {
     try {
       const currentEventId = eventId || await eventContext.getCurrentEventId();
+      
+      // Check if we have a token (authentication required now)
+      const token = await storage.getItem('auth_token');
+      if (!token) {
+        return {
+          ok: false,
+          message: 'Authentication required',
+          status: 401,
+        };
+      }
+
       const response = await httpClient.get(API_ENDPOINTS.MOBILE.MESSAGE_DETAIL(currentEventId, id));
+      
+      if (response.status === 401) {
+        return {
+          ok: false,
+          message: 'Authentication required',
+          status: 401,
+        };
+      }
       
       if (response.ok) {
         const responseData = response.data as any;
@@ -571,18 +611,43 @@ export const api = {
           attachments: responseData?.attachments || [],
         };
       } else {
-        throw new Error(response.message || 'Message not found');
+        return {
+          ok: false,
+          message: response.message || 'Message not found',
+        };
       }
     } catch (error) {
       console.error('getMessage error:', error);
-      throw error;
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Failed to get message',
+      };
     }
   },
 
   async acknowledgeMessage(id: string, eventId?: string): Promise<ApiResponse> {
     try {
       const currentEventId = eventId || await eventContext.getCurrentEventId();
+      
+      // Check if we have a token (authentication required now)
+      const token = await storage.getItem('auth_token');
+      if (!token) {
+        return {
+          ok: false,
+          message: 'Authentication required',
+          status: 401,
+        };
+      }
+
       const response = await httpClient.post(API_ENDPOINTS.MOBILE.ACKNOWLEDGE_MESSAGE(currentEventId, id));
+      
+      if (response.status === 401) {
+        return {
+          ok: false,
+          message: 'Authentication required',
+          status: 401,
+        };
+      }
       
       if (response.ok) {
         return {
@@ -590,11 +655,17 @@ export const api = {
           message: 'Message acknowledged',
         };
       } else {
-        throw new Error(response.message || 'Failed to acknowledge message');
+        return {
+          ok: false,
+          message: response.message || 'Failed to acknowledge message',
+        };
       }
     } catch (error) {
       console.error('acknowledgeMessage error:', error);
-      throw error;
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'Failed to acknowledge message',
+      };
     }
   },
 
@@ -688,26 +759,45 @@ export const api = {
   async getMe(eventId?: string): Promise<ApiResponse> {
     try {
       const currentEventId = eventId || await eventContext.getCurrentEventId();
-      const userEmail = await storage.getItem('auth_email');
       
-      if (!userEmail) {
+      // Check if we have a token (authentication required now)
+      const token = await storage.getItem('auth_token');
+      console.log('=== getMe API call ===');
+      console.log('Current event ID:', currentEventId);
+      console.log('Token exists:', !!token);
+      console.log('Token prefix:', token ? token.substring(0, 20) + '...' : 'none');
+      
+      if (!token) {
+        console.log('No token found - returning 401');
         return {
           ok: false,
-          message: 'No authenticated user email found',
+          message: 'Authentication required',
+          status: 401,
         };
       }
 
-      const response = await httpClient.get(`${API_ENDPOINTS.MOBILE.PROFILE(currentEventId)}?email=${encodeURIComponent(userEmail)}`);
+      console.log('Making authenticated request to:', API_ENDPOINTS.MOBILE.PROFILE(currentEventId));
+      const response = await httpClient.get(`${API_ENDPOINTS.MOBILE.PROFILE(currentEventId)}`);
+      
+      if (response.status === 401) {
+        return {
+          ok: false,
+          message: 'Authentication required',
+          status: 401,
+        };
+      }
       
       if (response.ok) {
         return {
           ok: true,
           data: response.data,
+          status: response.status,
         };
       } else {
         return {
           ok: false,
           message: response.message || 'Failed to load profile',
+          status: response.status,
         };
       }
     } catch (error) {
@@ -722,21 +812,30 @@ export const api = {
   async updateMe(partial: any, eventId?: string): Promise<ApiResponse> {
     try {
       const currentEventId = eventId || await eventContext.getCurrentEventId();
-      const userEmail = await storage.getItem('auth_email');
       
-      if (!userEmail) {
+      // Check if we have a token (authentication required now)
+      const token = await storage.getItem('auth_token');
+      if (!token) {
         return {
           ok: false,
-          message: 'No authenticated user email found',
+          message: 'Authentication required',
+          status: 401,
         };
       }
 
-      // Add email as query parameter instead of in body
-      const endpoint = `${API_ENDPOINTS.MOBILE.PROFILE(currentEventId)}?email=${encodeURIComponent(userEmail)}`;
+      const endpoint = `${API_ENDPOINTS.MOBILE.PROFILE(currentEventId)}`;
       console.log('Making PATCH request to:', endpoint);
       console.log('Request body:', partial);
 
       const response = await httpClient.patch(endpoint, partial);
+      
+      if (response.status === 401) {
+        return {
+          ok: false,
+          message: 'Authentication required',
+          status: 401,
+        };
+      }
       
       if (response.ok) {
         return {
@@ -762,17 +861,21 @@ export const api = {
   async getEventDetails(eventId?: string): Promise<ApiResponse> {
     try {
       const currentEventId = eventId || await eventContext.getCurrentEventId();
+      
+      // Event details endpoint is public - no authentication required
       const response = await httpClient.get(API_ENDPOINTS.MOBILE.EVENT_DETAILS(currentEventId));
       
       if (response.ok) {
         return {
           ok: true,
           data: response.data,
+          status: response.status,
         };
       } else {
         return {
           ok: false,
           message: response.message || 'Failed to get event details',
+          status: response.status,
         };
       }
     } catch (error) {

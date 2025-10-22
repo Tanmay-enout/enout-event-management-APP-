@@ -36,9 +36,13 @@ export default function PhoneInputScreen() {
     try {
       setIsSubmitting(true);
       
-      // Clear any previous phone verification flag since user is starting new verification
+      // Clear any previous phone verification flag since user is starting new verification (user-specific)
+      const userEmail = await storage.getItem('auth_email');
+      const userSpecificKey = userEmail ? `user_verified_phone_${userEmail}` : 'user_verified_phone';
+      await storage.removeItem(userSpecificKey);
+      // Also clear the old global flag if it exists
       await storage.removeItem('user_verified_phone');
-      console.log('Cleared previous phone verification flag for new verification');
+      console.log('Cleared previous phone verification flag for new verification:', userSpecificKey);
       
       // Combine country code and phone number
       const fullPhoneNumber = `${data.countryCode}${data.phoneNumber}`;

@@ -62,9 +62,11 @@ export default function PhoneVerificationScreen() {
       });
       
       if (response.ok) {
-        // Set flag that user has verified phone through mobile app
-        await storage.setItem('user_verified_phone', 'true');
-        console.log('Phone verification successful - setting user_verified_phone flag');
+        // Set flag that user has verified phone through mobile app (user-specific)
+        const userEmail = await storage.getItem('auth_email');
+        const userSpecificKey = userEmail ? `user_verified_phone_${userEmail}` : 'user_verified_phone';
+        await storage.setItem(userSpecificKey, 'true');
+        console.log('Phone verification successful - setting user-specific flag:', userSpecificKey);
         
         Alert.alert('Success', 'Phone verification successful!');
         // Small delay to ensure API updates are reflected

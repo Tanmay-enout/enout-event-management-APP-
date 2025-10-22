@@ -1,6 +1,6 @@
 // API Configuration - supports both localhost and network IP for physical device testing
 export const API_CONFIG = {
-  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://192.168.31.181:3003',
+  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://192.168.29.136:3003',
   // Add timeout and other settings
   TIMEOUT: 10000,
 };

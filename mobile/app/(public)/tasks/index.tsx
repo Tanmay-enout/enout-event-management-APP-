@@ -39,6 +39,37 @@ export default function TasksScreen() {
   // Load user info and check task completion status when screen focuses
   useFocusEffect(
     React.useCallback(() => {
+      // Ensure phone verification flag is properly initialized for the current user
+      const initializePhoneVerification = async () => {
+        const userEmail = await storage.getItem('auth_email');
+        if (!userEmail) {
+          console.log('No user email found - skipping phone verification initialization');
+          setUserVerifiedPhone(false);
+          return;
+        }
+        
+        const userSpecificKey = `user_verified_phone_${userEmail}`;
+        const currentFlag = await storage.getItem(userSpecificKey);
+        console.log('=== PHONE VERIFICATION INITIALIZATION ===');
+        console.log('User email:', userEmail);
+        console.log('User-specific key:', userSpecificKey);
+        console.log('Current flag from storage:', currentFlag);
+        console.log('Flag type:', typeof currentFlag);
+        
+        // Only trust the flag if it's explicitly set to 'true' for this specific user
+        if (currentFlag !== 'true') {
+          console.log('Phone verification not completed for this user - clearing flag');
+          await storage.removeItem(userSpecificKey);
+          // Also clear the old global flag if it exists
+          await storage.removeItem('user_verified_phone');
+          setUserVerifiedPhone(false);
+        } else {
+          console.log('Phone verification flag is valid for this user');
+          setUserVerifiedPhone(true);
+        }
+      };
+      
+      initializePhoneVerification();
       loadUserInfo();
       // Add small delay to ensure any previous API calls have completed
       setTimeout(() => {
@@ -97,11 +128,15 @@ export default function TasksScreen() {
       });
       
       // Check if user has verified phone through mobile app
-      const userVerifiedPhoneFlag = await storage.getItem('user_verified_phone');
+      const userEmail = await storage.getItem('auth_email');
+      const userSpecificKey = userEmail ? `user_verified_phone_${userEmail}` : 'user_verified_phone';
+      const userVerifiedPhoneFlag = await storage.getItem(userSpecificKey);
       const hasUserVerifiedPhone = userVerifiedPhoneFlag === 'true';
       setUserVerifiedPhone(hasUserVerifiedPhone);
       
       console.log('Phone verification status:', {
+        userEmail: userEmail,
+        userSpecificKey: userSpecificKey,
         userVerifiedPhoneFlag: userVerifiedPhoneFlag,
         hasUserVerifiedPhone: hasUserVerifiedPhone,
         profilePhoneVerified: profile.phoneVerified,
@@ -111,35 +146,43 @@ export default function TasksScreen() {
       // Use the current tasks state to avoid closure issues
       setTasks(currentTasks => {
         const updatedTasks = currentTasks.map(task => {
-        if (task.id === 'id') {
-          // Check if ID document has been uploaded
-          const idUploaded = profile.idDocUrl && profile.idDocUrl.trim() !== '';
-          console.log(`ID upload task: ${idUploaded ? 'completed' : 'pending'} (url: ${profile.idDocUrl})`);
-          return { ...task, status: idUploaded ? 'completed' : 'pending' };
-        }
-        
-        if (task.id === 'form') {
-          // Check if registration form is completed (has required fields filled)
-          const formCompleted = profile.firstName && 
-                              profile.lastName && 
-                              profile.firstName.trim() !== '' && 
-                              profile.lastName.trim() !== '' &&
-                              profile.gender && 
-                              profile.gender.trim() !== '';
-          console.log(`Form task: ${formCompleted ? 'completed' : 'pending'} (firstName: ${profile.firstName}, lastName: ${profile.lastName}, gender: ${profile.gender})`);
-          return { ...task, status: formCompleted ? 'completed' : 'pending' };
-        }
-        
-        if (task.id === 'phone-input') {
-          // Check if phone verification was completed through mobile app
-          const phoneVerified = hasUserVerifiedPhone;
-          console.log(`Phone verification task: ${phoneVerified ? 'completed' : 'pending'} (userVerifiedPhone: ${hasUserVerifiedPhone})`);
-          return { ...task, status: phoneVerified ? 'completed' : 'pending' };
-        }
-        
-        return task;
+          if (task.id === 'id') {
+            // Check if ID document has been uploaded
+            const idUploaded = profile.idDocUrl && profile.idDocUrl.trim() !== '';
+            console.log(`ID upload task: ${idUploaded ? 'completed' : 'pending'} (url: ${profile.idDocUrl})`);
+            return { ...task, status: idUploaded ? 'completed' : 'pending' };
+          }
+          
+          if (task.id === 'form') {
+            // Check if registration form is completed (has required fields filled)
+            const formCompleted = profile.firstName && 
+                                profile.lastName && 
+                                profile.firstName.trim() !== '' && 
+                                profile.lastName.trim() !== '' &&
+                                profile.gender && 
+                                profile.gender.trim() !== '';
+            console.log(`Form task: ${formCompleted ? 'completed' : 'pending'} (firstName: ${profile.firstName}, lastName: ${profile.lastName}, gender: ${profile.gender})`);
+            return { ...task, status: formCompleted ? 'completed' : 'pending' };
+          }
+          
+          if (task.id === 'phone-input') {
+            // CRITICAL: Only mark as completed if user verified phone with OTP in mobile app
+            // Completely ignore any admin-entered phone verification status
+            const isCompleted = hasUserVerifiedPhone;
+            console.log(`Phone task status check:`, {
+              taskId: task.id,
+              userVerifiedPhoneFlag: userVerifiedPhoneFlag,
+              hasUserVerifiedPhone: hasUserVerifiedPhone,
+              isCompleted: isCompleted,
+              profilePhoneVerified: profile.phoneVerified,
+              message: isCompleted ? 'COMPLETED by user OTP verification' : 'PENDING - user must verify with OTP'
+            });
+            return { ...task, status: isCompleted ? 'completed' : 'pending' };
+          }
+          
+          return task;
         });
-        
+
         return updatedTasks;
       });
     } catch (error) {
