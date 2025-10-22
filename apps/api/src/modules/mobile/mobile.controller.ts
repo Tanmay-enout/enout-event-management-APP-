@@ -1,11 +1,13 @@
-import { Controller, Get, Patch, Post, Body, Param, HttpCode, Logger, Req, UseGuards, UploadedFile, UseInterceptors, Query, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Body, Param, HttpCode, Logger, UseGuards, UploadedFile, UseInterceptors, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MobileService } from './mobile.service';
 import { UpdateAttendeeProfileDto, AttendeeProfileResponseDto } from './dto/attendee-profile.dto';
 import { MobileMessageDto, MobileMessagesResponseDto } from './dto/mobile-message.dto';
 import { ApiErrorResponse } from '../../common/dto/api-response.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { MobileJwtAuthGuard } from '../auth/guards/mobile-jwt-auth.guard';
+import { MobileUser } from '../auth/decorators/mobile-user.decorator';
+import { Attendee } from '@prisma/client';
 
 @ApiTags('mobile')
 @Controller()
@@ -33,6 +35,8 @@ export class MobileController {
   }
 
   @Get('/events/:eventId/profile')
+  @UseGuards(MobileJwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current attendee profile' })
   @ApiParam({ name: 'eventId', description: 'Event ID' })
   @ApiResponse({
@@ -41,20 +45,34 @@ export class MobileController {
     type: AttendeeProfileResponseDto,
   })
   @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ApiErrorResponse,
+  })
+  @ApiResponse({
     status: 404,
     description: 'Attendee not found',
     type: ApiErrorResponse,
   })
   async getAttendeeProfile(
     @Param('eventId') eventId: string,
-    @Query('email') email: string,
+    @MobileUser() attendee: Attendee,
   ): Promise<AttendeeProfileResponseDto> {
-    this.logger.debug(`Getting profile for email: ${email} in event ${eventId}`);
-    const attendee = await this.mobileService.getAttendeeByEmail(eventId, email);
+    console.log('=== getAttendeeProfile Controller ===');
+    console.log('EventId:', eventId);
+    console.log('Attendee:', attendee ? { id: attendee.id, email: attendee.email } : 'none');
+    this.logger.debug(`Getting profile for attendee: ${attendee?.id} in event ${eventId}`);
+    
+    if (!attendee) {
+      throw new UnauthorizedException('No attendee found in request');
+    }
+    
     return this.mobileService.getAttendeeProfile(eventId, attendee.id);
   }
 
   @Patch('/events/:eventId/profile')
+  @UseGuards(MobileJwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Update current attendee profile' })
   @ApiParam({ name: 'eventId', description: 'Event ID' })
   @ApiResponse({
@@ -63,31 +81,40 @@ export class MobileController {
     type: AttendeeProfileResponseDto,
   })
   @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ApiErrorResponse,
+  })
+  @ApiResponse({
     status: 404,
     description: 'Attendee not found',
     type: ApiErrorResponse,
   })
   async updateAttendeeProfile(
     @Param('eventId') eventId: string,
-    @Query('email') email: string,
+    @MobileUser() attendee: Attendee,
     @Body() dto: UpdateAttendeeProfileDto,
   ): Promise<AttendeeProfileResponseDto> {
-    this.logger.debug(`Updating profile for email: ${email} in event ${eventId}`, dto);
+    this.logger.debug(`Updating profile for attendee: ${attendee.id} in event ${eventId}`, dto);
     
-    // First get the attendee by email to get the attendeeId
-    const attendee = await this.mobileService.getAttendeeByEmail(eventId, email);
-    
-    // Now update the profile using the proper attendeeId
+    // Now update the profile using the authenticated attendee's ID
     return this.mobileService.updateAttendeeProfile(eventId, attendee.id, dto);
   }
 
   @Post('/events/:eventId/upload-documents')
   @HttpCode(200)
+  @UseGuards(MobileJwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Upload ID document for attendee' })
   @ApiParam({ name: 'eventId', description: 'Event ID' })
   @ApiResponse({
     status: 200,
     description: 'Document uploaded successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ApiErrorResponse,
   })
   @ApiResponse({
     status: 400,
@@ -112,6 +139,7 @@ export class MobileController {
     @Param('eventId') eventId: string,
     @UploadedFile() file: any,
     @Body() body: any,
+    @MobileUser() attendee: Attendee,
   ): Promise<{ ok: boolean; message: string; idDocUrl?: string }> {
     try {
       this.logger.debug(`Upload request - hasFile: ${!!file}, hasBody: ${!!body}`);
@@ -131,18 +159,14 @@ export class MobileController {
       this.logger.error('No file found in request');
       throw new BadRequestException('No file uploaded. Please ensure you are sending a file with the field name "document".');
     }
-
-    // Extract email safely
-    const email = typeof body.email === 'string' ? body.email : (Array.isArray(body.email) ? body.email[0] : '');
-    if (!email) {
-      throw new BadRequestException('Email is required');
-    }
     
-    this.logger.debug(`Processing upload for email: ${email}`);
-    return await this.mobileService.uploadDocument(eventId, email, actualFile);
+    this.logger.debug(`Processing upload for attendee: ${attendee.id}`);
+    return await this.mobileService.uploadDocument(eventId, attendee.email, actualFile);
   }
 
   @Get('/events/:eventId/mobile-messages')
+  @UseGuards(MobileJwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'List mobile messages' })
   @ApiParam({ name: 'eventId', description: 'Event ID' })
   @ApiResponse({
@@ -150,25 +174,24 @@ export class MobileController {
     description: 'List of messages',
     type: MobileMessagesResponseDto,
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ApiErrorResponse,
+  })
   async getMobileMessages(
     @Param('eventId') eventId: string,
-    @Query('email') email: string,
+    @MobileUser() attendee: Attendee,
   ): Promise<MobileMessagesResponseDto> {
     console.log('=== getMobileMessages Controller DEBUG ===');
-    console.log('Getting messages for email:', email, 'in event:', eventId);
-    
-    if (!email) {
-      throw new BadRequestException('Email parameter is required');
-    }
-    
-    // Get the attendee by email to get the attendeeId
-    const attendee = await this.mobileService.getAttendeeByEmail(eventId, email);
-    console.log('Found attendee:', attendee.id, 'for email:', email);
+    console.log('Getting messages for attendee:', attendee.id, 'in event:', eventId);
     
     return this.mobileService.getMobileMessages(eventId, attendee.id);
   }
 
   @Get('/events/:eventId/mobile-messages/:id')
+  @UseGuards(MobileJwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get a specific mobile message' })
   @ApiParam({ name: 'eventId', description: 'Event ID' })
   @ApiParam({ name: 'id', description: 'Message ID' })
@@ -178,6 +201,11 @@ export class MobileController {
     type: MobileMessageDto,
   })
   @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ApiErrorResponse,
+  })
+  @ApiResponse({
     status: 404,
     description: 'Message not found',
     type: ApiErrorResponse,
@@ -185,13 +213,16 @@ export class MobileController {
   async getMobileMessage(
     @Param('eventId') eventId: string,
     @Param('id') id: string,
+    @MobileUser() attendee: Attendee,
   ): Promise<MobileMessageDto> {
-    this.logger.debug(`Getting message ${id} in event ${eventId}`);
+    this.logger.debug(`Getting message ${id} in event ${eventId} for attendee ${attendee.id}`);
     return this.mobileService.getMobileMessage(eventId, id);
   }
 
   @Post('/events/:eventId/mobile-messages/:id/acknowledge')
   @HttpCode(200)
+  @UseGuards(MobileJwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Mark a message as read' })
   @ApiParam({ name: 'eventId', description: 'Event ID' })
   @ApiParam({ name: 'id', description: 'Message ID' })
@@ -209,14 +240,20 @@ export class MobileController {
     },
   })
   @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+    type: ApiErrorResponse,
+  })
+  @ApiResponse({
     status: 404,
     description: 'Message not found',
     type: ApiErrorResponse,
   })
   async acknowledgeMessage(
     @Param('id') id: string,
+    @MobileUser() attendee: Attendee,
   ): Promise<{ ok: boolean }> {
-    this.logger.debug(`Acknowledging message ${id}`);
+    this.logger.debug(`Acknowledging message ${id} for attendee ${attendee.id}`);
     return this.mobileService.acknowledgeMessage(id);
   }
 }

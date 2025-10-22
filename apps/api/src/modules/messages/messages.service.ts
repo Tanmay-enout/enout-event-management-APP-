@@ -29,9 +29,20 @@ export class MessagesService {
     console.log('EventId:', eventId);
     console.log('Data:', JSON.stringify(data, null, 2));
     
+    // If attendeeId is provided (direct message to accepted guest)
+    if (data.attendeeId) {
+      return this.createDirectMessage(eventId, data);
+    }
+    
+    // If inviteId is provided (message to invited guest - queue it)
+    if (data.inviteId) {
+      return this.createQueuedMessage(eventId, data);
+    }
+    
     // If this is a broadcast message (no specific attendeeId) and status is 'sent'
-    // create individual messages for all attendees
+    // create individual messages for all attendees and queue for all invites
     if (!data.attendeeId && (data.status === 'sent' || data.status === undefined)) {
+
       // Get attendees for this event
       const allAttendees = await this.prisma.attendee.findMany({
         where: { eventId },
@@ -85,24 +96,39 @@ export class MessagesService {
           const allAcceptedEmails = new Set([...acceptedInviteEmails, ...acceptedAtEmails]);
           
           attendees = allAttendees.filter(a => allAcceptedEmails.has(a.email));
-        } else {
-          // For 'invited' audience, check for any invite status
-          const attendeeEmails = allAttendees.map(a => a.email);
-          
-          const invites = await this.prisma.invite.findMany({
-            where: {
-              eventId,
-              email: { in: attendeeEmails },
-              status: { in: ['pending', 'accepted', 'sent'] },
-            },
-            select: { email: true, status: true },
+        } else if (data.audience === 'invited') {
+          // For 'invited' audience, create queued messages for all invites (not attendees)
+          console.log('Creating queued messages for all invites');
+          const allInvites = await this.prisma.invite.findMany({
+            where: { eventId },
+            select: { id: true, email: true, status: true },
           });
 
-          console.log('Found invites:', invites.length);
-          console.log('Invites:', JSON.stringify(invites, null, 2));
+          console.log('Found invites for queuing:', allInvites.length);
 
-          const invitedEmails = new Set(invites.map(i => i.email));
-          attendees = allAttendees.filter(a => invitedEmails.has(a.email));
+          const inviteMessages = await Promise.all(
+            allInvites.map(async (invite) => {
+              console.log('Creating queued message for invite:', invite.email, 'ID:', invite.id);
+              const message = await this.prisma.mobileMessage.create({
+                data: {
+                  eventId,
+                  inviteId: invite.id,
+                  title: data.title,
+                  body: data.body,
+                  attachments: data.attachments || {},
+                  status: data.status || 'sent',
+                  deliveryStatus: 'queued', // Will be delivered when guest accepts
+                  unread: true,
+                },
+              });
+              console.log('Created queued message:', message.id, 'for invite:', invite.email);
+              return message;
+            })
+          );
+
+          console.log('Total queued messages created:', inviteMessages.length);
+          // Return the broadcast record for admin panel
+          return broadcast;
         }
         
         console.log('Filtered attendees:', attendees.length);
@@ -110,33 +136,74 @@ export class MessagesService {
       }
       // For 'all' or undefined audience, use all attendees
 
-      // Create individual MobileMessage records for each attendee
+      // Create individual MobileMessage records for each attendee (delivered immediately)
       console.log('Creating messages for', attendees.length, 'attendees');
       
-      const mobileMessages = await Promise.all(
-        attendees.map(async (attendee) => {
-          console.log('Creating message for attendee:', attendee.email, 'ID:', attendee.id);
-          const message = await this.prisma.mobileMessage.create({
-            data: {
-              eventId,
-              attendeeId: attendee.id,
-              title: data.title,
-              body: data.body,
-              attachments: data.attachments || {},
-              status: data.status || 'sent',
-              unread: true,
-            },
-          });
-          console.log('Created message:', message.id, 'for attendee:', attendee.email);
-          return message;
-        })
-      );
+      const attendeeMessages = [];
+      if (attendees.length > 0) {
+        const messages = await Promise.all(
+          attendees.map(async (attendee) => {
+            console.log('Creating message for attendee:', attendee.email, 'ID:', attendee.id);
+            const message = await this.prisma.mobileMessage.create({
+              data: {
+                eventId,
+                attendeeId: attendee.id,
+                title: data.title,
+                body: data.body,
+                attachments: data.attachments || {},
+                status: data.status || 'sent',
+                deliveryStatus: 'delivered', // Immediate delivery for accepted guests
+                unread: true,
+                deliveredAt: new Date(),
+              },
+            });
+            console.log('Created message:', message.id, 'for attendee:', attendee.email);
+            return message;
+          })
+        );
+        attendeeMessages.push(...messages);
+      }
 
-      console.log('Total messages created:', mobileMessages.length);
+      // For broadcast messages, also create queued messages for all invites
+      console.log('Creating queued messages for all invites');
+      const allInvites = await this.prisma.invite.findMany({
+        where: { eventId },
+        select: { id: true, email: true, status: true },
+      });
+
+      console.log('Found invites:', allInvites.length);
+
+      const inviteMessages = [];
+      if (allInvites.length > 0) {
+        const messages = await Promise.all(
+          allInvites.map(async (invite) => {
+            console.log('Creating queued message for invite:', invite.email, 'ID:', invite.id);
+            const message = await this.prisma.mobileMessage.create({
+              data: {
+                eventId,
+                inviteId: invite.id,
+                title: data.title,
+                body: data.body,
+                attachments: data.attachments || {},
+                status: data.status || 'sent',
+                deliveryStatus: 'queued', // Will be delivered when guest accepts
+                unread: true,
+              },
+            });
+            console.log('Created queued message:', message.id, 'for invite:', invite.email);
+            return message;
+          })
+        );
+        inviteMessages.push(...messages);
+      }
+
+      console.log('Total attendee messages created:', attendeeMessages.length);
+      console.log('Total invite messages created:', inviteMessages.length);
+      
       // Return the first message as a representative
-      return mobileMessages[0];
+      return attendeeMessages[0] || inviteMessages[0];
     } else {
-      // Create individual message
+      // Create individual message (fallback for other cases)
       return this.prisma.mobileMessage.create({
         data: {
           eventId,
@@ -145,10 +212,87 @@ export class MessagesService {
           attachments: data.attachments || {},
           attendeeId: data.attendeeId,
           status: data.status || 'sent',
+          deliveryStatus: 'delivered', // Default to delivered for individual messages
           unread: data.attendeeId ? true : false,
+          deliveredAt: new Date(),
         },
       });
     }
+  }
+
+  /**
+   * Create a direct message for an accepted guest (existing functionality)
+   */
+  private async createDirectMessage(eventId: string, data: any) {
+    return this.prisma.mobileMessage.create({
+      data: {
+        eventId,
+        attendeeId: data.attendeeId,
+        title: data.title,
+        body: data.body,
+        attachments: data.attachments || {},
+        status: data.status || 'sent',
+        deliveryStatus: 'delivered', // Direct delivery for accepted guests
+        unread: true,
+        deliveredAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Create a queued message for an invited guest
+   */
+  private async createQueuedMessage(eventId: string, data: any) {
+    return this.prisma.mobileMessage.create({
+      data: {
+        eventId,
+        inviteId: data.inviteId,
+        title: data.title,
+        body: data.body,
+        attachments: data.attachments || {},
+        status: data.status || 'sent',
+        deliveryStatus: 'queued', // Will be delivered when guest accepts
+        unread: true,
+      },
+    });
+  }
+
+  /**
+   * Deliver all queued messages for a specific invite when guest accepts
+   */
+  async deliverQueuedMessages(inviteId: string, attendeeId: string) {
+    console.log('=== deliverQueuedMessages DEBUG ===');
+    console.log('InviteId:', inviteId);
+    console.log('AttendeeId:', attendeeId);
+
+    const queuedMessages = await this.prisma.mobileMessage.findMany({
+      where: {
+        inviteId,
+        deliveryStatus: 'queued',
+      },
+    });
+
+    console.log('Found queued messages:', queuedMessages.length);
+
+    if (queuedMessages.length === 0) {
+      return 0;
+    }
+
+    // Update all queued messages to be delivered
+    const updateResult = await this.prisma.mobileMessage.updateMany({
+      where: {
+        inviteId,
+        deliveryStatus: 'queued',
+      },
+      data: {
+        attendeeId,
+        deliveryStatus: 'delivered',
+        deliveredAt: new Date(),
+      },
+    });
+
+    console.log('Updated messages:', updateResult.count);
+    return updateResult.count;
   }
 
   async updateMessage(eventId: string, id: string, data: any) {

@@ -37,11 +37,14 @@ export class MessagesController {
         id: msg.id,
         eventId: msg.eventId,
         attendeeId: msg.attendeeId || undefined,
+        inviteId: msg.inviteId || undefined, // NEW: Include inviteId
         title: msg.title,
         body: msg.body,
         attachments: msg.attachments,
         status: msg.status,
+        deliveryStatus: msg.deliveryStatus || 'delivered', // NEW: Include deliveryStatus
         unread: msg.unread,
+        deliveredAt: msg.deliveredAt || undefined, // NEW: Include deliveredAt
         createdAt: msg.createdAt,
       })),
       total,
@@ -58,8 +61,13 @@ export class MessagesController {
     @Param('eventId') eventId: string,
     @Body() createMessageDto: any,
   ): Promise<MessageDto> {
-    const message = await this.messagesService.createMessage(eventId, createMessageDto);
-    return this.transformToDto(message);
+    try {
+      const message = await this.messagesService.createMessage(eventId, createMessageDto);
+      return this.transformToDto(message);
+    } catch (error) {
+      console.error('Error creating message:', error);
+      throw error;
+    }
   }
 
   @Get(':id')
@@ -111,11 +119,14 @@ export class MessagesController {
       id: message.id,
       eventId: message.eventId,
       attendeeId: message.attendeeId || undefined,
+      inviteId: message.inviteId || undefined, // NEW: Include inviteId
       title: message.title,
       body: message.body,
       attachments: message.attachments,
       status: message.status,
+      deliveryStatus: message.deliveryStatus || 'delivered', // NEW: Include deliveryStatus
       unread: message.unread,
+      deliveredAt: message.deliveredAt || undefined, // NEW: Include deliveredAt
       createdAt: message.createdAt,
     };
   }

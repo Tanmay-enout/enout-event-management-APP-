@@ -24,7 +24,10 @@ export class MobileService {
       acceptedAt: attendee.acceptedAt,
       tasksJson: attendee.tasksJson,
       idDocUrl: attendee.idDocUrl,
-      phoneVerified: attendee.phoneVerified,
+      // Always return false for phoneVerified to force mobile app to use OTP verification
+      // Mobile app uses local storage flag 'user_verified_phone' to determine completion status
+      // This ensures phone verification only happens through proper mobile OTP flow
+      phoneVerified: false,
       createdAt: attendee.createdAt,
       updatedAt: attendee.updatedAt,
     };
@@ -99,7 +102,12 @@ export class MobileService {
     console.log('EventId:', eventId);
     console.log('AttendeeId:', attendeeId);
     
-    const whereClause = { eventId, ...(attendeeId ? { attendeeId } : {}) };
+    // Only show delivered messages to mobile users (queued messages are not visible until delivered)
+    const whereClause = { 
+      eventId, 
+      deliveryStatus: 'delivered', // NEW: Only show delivered messages
+      ...(attendeeId ? { attendeeId } : {}) 
+    };
     console.log('Where clause:', JSON.stringify(whereClause, null, 2));
 
     const [messages, total] = await Promise.all([
@@ -355,7 +363,7 @@ export class MobileService {
 
     try {
       // Update the attendee record with the document URL
-      const updatedAttendee = await this.prisma.attendee.update({
+      await this.prisma.attendee.update({
         where: { id: attendee.id },
         data: {
           idDocUrl: idDocUrl,

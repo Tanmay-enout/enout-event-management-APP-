@@ -91,7 +91,8 @@ model Invite {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event          Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  mobileMessages MobileMessage[] // NEW: Relation to queued messages
 
   @@unique([eventId, email])
   @@map("invites")
@@ -201,20 +202,26 @@ model Attachment {
 }
 
 model MobileMessage {
-  id         String   @id @default(cuid())
-  eventId    String
-  attendeeId String?
-  title      String
-  body       String
-  attachments Json?
-  status     String   @default("sent") // "sent", "draft", "scheduled"
-  unread     Boolean  @default(true)
-  createdAt  DateTime @default(now())
+  id             String   @id @default(cuid())
+  eventId        String
+  attendeeId     String?
+  inviteId       String?  // NEW: Link to invite when guest is still invited
+  title          String
+  body           String
+  attachments    Json?
+  status         String   @default("sent") // "sent", "draft", "scheduled"
+  deliveryStatus String   @default("delivered") // NEW: "queued", "delivered"
+  unread         Boolean  @default(true)
+  deliveredAt    DateTime? // NEW: When message was delivered to inbox
+  createdAt      DateTime @default(now())
 
   event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   attendee  Attendee? @relation(fields: [attendeeId], references: [id], onDelete: SetNull)
+  invite    Invite?   @relation(fields: [inviteId], references: [id], onDelete: SetNull) // NEW
 
   @@index([eventId, createdAt])
+  @@index([inviteId]) // NEW
+  @@index([deliveryStatus]) // NEW
   @@map("mobile_messages")
 }
 

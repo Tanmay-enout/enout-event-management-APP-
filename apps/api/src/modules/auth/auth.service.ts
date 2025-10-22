@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '../cache/redis.service';
+import { MessagesService } from '../messages/messages.service';
 
 @Injectable()
 export class AuthService {
@@ -9,6 +10,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly redisService: RedisService,
+    private readonly messagesService: MessagesService,
   ) {}
 
   async sendOtp(email: string): Promise<{ eventId: string; eventName?: string }> {
@@ -282,6 +284,8 @@ export class AuthService {
         },
       });
 
+      let attendeeId: string;
+      
       if (existingAttendee) {
         // Update existing attendee
         await this.prisma.attendee.update({
@@ -292,10 +296,11 @@ export class AuthService {
             updatedAt: new Date(),
           },
         });
+        attendeeId = existingAttendee.id;
         console.log(`Also updated existing attendee record for ${email}`);
       } else {
         // Create new attendee record from invite data
-        await this.prisma.attendee.create({
+        const newAttendee = await this.prisma.attendee.create({
           data: {
             eventId: invite.eventId,
             email: invite.email,
@@ -310,7 +315,17 @@ export class AuthService {
             updatedAt: new Date(),
           },
         });
+        attendeeId = newAttendee.id;
         console.log(`Created new attendee record for ${email}`);
+      }
+
+      // NEW: Deliver all queued messages for this invite
+      try {
+        const deliveredCount = await this.messagesService.deliverQueuedMessages(invite.id, attendeeId);
+        console.log(`Delivered ${deliveredCount} queued messages for ${email}`);
+      } catch (messageError) {
+        console.error(`Error delivering queued messages for ${email}:`, messageError);
+        // Don't throw error here as the main invite acceptance was successful
       }
     } catch (attendeeError) {
       console.error(`Error updating/creating attendee record for ${email}:`, attendeeError);
@@ -318,10 +333,48 @@ export class AuthService {
     }
   }
 
-  async login(email: string) {
-    const payload = { email, sub: email };
+  async login(email: string): Promise<{ access_token: string }> {
+    console.log('AuthService.login called with email:', email);
+    
+    // Find attendee by email across all events (case-insensitive)
+    let attendee = await this.prisma.attendee.findFirst({
+      where: {
+        email: email.trim(),
+      },
+    });
+
+    // Fallback to case-insensitive search if not found
+    if (!attendee) {
+      const attendees = await this.prisma.attendee.findMany({
+        where: {
+          email: {
+            mode: 'insensitive',
+            equals: email.trim(),
+          },
+        },
+      });
+      attendee = attendees[0] || null;
+    }
+
+    if (!attendee) {
+      throw new NotFoundException(`Attendee not found for email: ${email}`);
+    }
+
+    console.log('Found attendee for login:', { id: attendee.id, email: attendee.email });
+
+    // Generate JWT token with proper payload for mobile authentication
+    const payload = { 
+      email: attendee.email, 
+      sub: attendee.id, 
+      type: 'mobile' 
+    };
+    
+    const access_token = this.jwtService.sign(payload);
+    
+    console.log('Generated JWT token for attendee:', attendee.id);
+    
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token,
     };
   }
 

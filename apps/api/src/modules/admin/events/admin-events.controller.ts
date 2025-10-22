@@ -10,19 +10,17 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
-  // UseGuards, // Commented out for development
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AdminEventsService } from './admin-events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventFiltersDto } from './dto/event-filters.dto';
-// import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard'; // Commented out for development
-// import { AdminGuard } from '../../auth/guards/admin.guard'; // Commented out for development
+import { AdminJwtAuthGuard } from '../auth/guards/admin.guard';
 
 @Controller('api/admin/events')
-// TODO: Re-enable guards when JWT strategy is configured
-// @UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(AdminJwtAuthGuard)
 export class AdminEventsController {
   constructor(private readonly eventsService: AdminEventsService) {}
 

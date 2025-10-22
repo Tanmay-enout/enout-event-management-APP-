@@ -10,6 +10,9 @@ export class MessageDto {
   @ApiPropertyOptional({ description: 'Attendee ID' })
   attendeeId?: string;
 
+  @ApiPropertyOptional({ description: 'Invite ID (for queued messages)' })
+  inviteId?: string;
+
   @ApiProperty({ description: 'Message title' })
   title: string;
 
@@ -22,8 +25,14 @@ export class MessageDto {
   @ApiProperty({ description: 'Message status' })
   status: string;
 
+  @ApiProperty({ description: 'Delivery status (queued/delivered)' })
+  deliveryStatus: string;
+
   @ApiProperty({ description: 'Unread status' })
   unread: boolean;
+
+  @ApiPropertyOptional({ description: 'Delivered at timestamp' })
+  deliveredAt?: Date;
 
   @ApiProperty({ description: 'Created at timestamp' })
   createdAt: Date;
