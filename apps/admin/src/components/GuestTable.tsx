@@ -11,11 +11,12 @@ import {
   createColumnHelper,
   flexRender,
 } from '@tanstack/react-table';
-import { Download, Upload, Edit, Trash2, Search } from 'lucide-react';
+import { Download, Upload, Edit, Trash2, Search, Eye } from 'lucide-react';
 import { api } from '@/lib/api';
 import { AttendeeType, AttendeeStatusType } from '@enout/shared';
 import { cn } from '@/lib/utils';
 import { useCan } from '@/lib/useCan';
+import { AttendeeDetailsModal } from './AttendeeDetailsModal';
 
 const columnHelper = createColumnHelper<AttendeeType>();
 
@@ -40,6 +41,8 @@ export function GuestTable({ eventId }: { eventId: string }) {
   const [globalFilter, setGlobalFilter] = useState('');
   const [_selectedRows, _setSelectedRows] = useState<string[]>([]);
   const [_isEditing, _setIsEditing] = useState<string | null>(null);
+  const [selectedAttendee, setSelectedAttendee] = useState<any>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
   const canDelete = useCan('attendee.delete');
   const canEdit = useCan('attendee.edit');
@@ -111,6 +114,22 @@ export function GuestTable({ eventId }: { eventId: string }) {
     columnHelper.accessor('status', {
       header: 'Status',
       cell: (info) => <StatusBadge status={info.getValue()} />,
+    }),
+    columnHelper.display({
+      id: 'details',
+      header: 'Details',
+      cell: ({ row }) => (
+        <button
+          onClick={() => {
+            setSelectedAttendee(row.original);
+            setIsDetailsModalOpen(true);
+          }}
+          className="p-1 text-gray-400 hover:text-primary transition-colors"
+          title="View registration details"
+        >
+          <Eye className="h-4 w-4" />
+        </button>
+      ),
     }),
     columnHelper.display({
       id: 'actions',
@@ -301,6 +320,16 @@ export function GuestTable({ eventId }: { eventId: string }) {
           </button>
         </div>
       )}
+
+      {/* Attendee Details Modal */}
+      <AttendeeDetailsModal
+        isOpen={isDetailsModalOpen}
+        attendee={selectedAttendee}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedAttendee(null);
+        }}
+      />
     </div>
   );
 }

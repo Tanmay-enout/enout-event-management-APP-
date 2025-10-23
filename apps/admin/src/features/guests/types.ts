@@ -24,6 +24,13 @@ export const guestSchema = z.object({
   lastSentAt: z.string().datetime().nullable().optional(),
   acceptedAt: z.string().datetime().nullable().optional(),
   eventId: z.string(),
+  // NEW: Registration form fields
+  workEmail: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
+  gender: z.string().nullable().optional(),
+  dietaryRequirements: z.string().nullable().optional(),
+  idDocUrl: z.string().nullable().optional(),
+  phoneVerified: z.boolean().optional(),
 });
 
 export type Guest = z.infer<typeof guestSchema>;

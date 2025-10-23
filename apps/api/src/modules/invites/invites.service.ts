@@ -119,6 +119,13 @@ export class InvitesService {
         createdAt: invite.createdAt,
         lastSentAt: invite.lastSentAt,
         acceptedAt: attendee?.acceptedAt,
+        // ADD: Registration form fields from attendee
+        workEmail: attendee?.workEmail || null,
+        location: attendee?.location || null,
+        gender: attendee?.gender || null,
+        dietaryRequirements: attendee?.dietaryRequirements || null,
+        idDocUrl: attendee?.idDocUrl || null,
+        phoneVerified: attendee?.phoneVerified || false,
       };
     }).filter(Boolean) as GuestDto[];
 
@@ -416,6 +423,13 @@ export class InvitesService {
       createdAt: invite.createdAt,
       lastSentAt: invite.lastSentAt,
       acceptedAt: attendee?.acceptedAt,
+      // NEW: Add registration form fields from attendee
+      workEmail: attendee?.workEmail || null,
+      location: attendee?.location || null,
+      gender: attendee?.gender || null,
+      dietaryRequirements: attendee?.dietaryRequirements || null,
+      idDocUrl: attendee?.idDocUrl || null,
+      phoneVerified: attendee?.phoneVerified || false,
     };
   }
 

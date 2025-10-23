@@ -6,6 +6,7 @@ import { Room, AttendeeLite } from '@/features/rooms/api';
 import { StatusChip } from './StatusChip';
 import { GuestCellPicker } from './GuestCellPicker';
 import { AddRoomDialog } from './AddRoomDialog';
+import { ExportPdfButton } from './ExportPdfButton';
 import { useAddRoom, useAssignRoom, useClearAssignment, useDeleteRooms } from '@/features/rooms/api';
 import { cn } from '@/lib/utils';
 
@@ -127,6 +128,11 @@ export function RoomTable({ rooms, eligibleAttendees, eventId, isLoading }: Room
                 Delete ({selectedRooms.size})
               </button>
             )}
+            <ExportPdfButton
+              rooms={rooms}
+              eligibleAttendees={eligibleAttendees}
+              eventName={`Event ${eventId}`}
+            />
             <button
               onClick={() => setIsAddDialogOpen(true)}
               className="flex items-center gap-2 px-3 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"

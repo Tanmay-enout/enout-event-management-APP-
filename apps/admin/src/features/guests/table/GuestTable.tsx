@@ -11,11 +11,13 @@ import {
   createColumnHelper,
   flexRender,
 } from '@tanstack/react-table';
+import { Eye } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Guest, GuestFilters, statusColors } from '../types';
 import { guestsApi } from '../api';
 import { RowActions } from './RowActions';
 import { useCan } from '@/lib/useCan';
+import { AttendeeDetailsModal } from '@/components/guests/AttendeeDetailsModal';
 
 const columnHelper = createColumnHelper<Guest>();
 
@@ -108,6 +110,9 @@ export function GuestTable({
     },
   });
 
+  const [selectedGuest, setSelectedGuest] = React.useState<Guest | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = React.useState(false);
+
   const columns = [
     columnHelper.display({
       id: 'select',
@@ -181,6 +186,22 @@ export function GuestTable({
     columnHelper.accessor('derivedStatus', {
       header: 'Status',
       cell: (info) => <StatusBadge status={info.getValue()} />,
+    }),
+    columnHelper.display({
+      id: 'details',
+      header: 'Details',
+      cell: ({ row }) => (
+        <button
+          onClick={() => {
+            setSelectedGuest(row.original);
+            setIsDetailsModalOpen(true);
+          }}
+          className="p-1 text-gray-400 hover:text-primary transition-colors"
+          title="View registration details"
+        >
+          <Eye className="h-4 w-4" />
+        </button>
+      ),
     }),
     columnHelper.display({
       id: 'actions',
@@ -308,6 +329,16 @@ export function GuestTable({
           </p>
         </div>
       )}
+
+      {/* Attendee Details Modal */}
+      <AttendeeDetailsModal
+        isOpen={isDetailsModalOpen}
+        attendee={selectedGuest}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedGuest(null);
+        }}
+      />
     </div>
   );
 }

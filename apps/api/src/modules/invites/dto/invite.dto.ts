@@ -117,6 +117,25 @@ export class GuestDto {
 
   @ApiProperty({ required: false })
   acceptedAt?: Date | null;
+
+  // NEW: Registration form fields
+  @ApiProperty({ required: false })
+  workEmail?: string | null;
+
+  @ApiProperty({ required: false })
+  location?: string | null;
+
+  @ApiProperty({ required: false })
+  gender?: string | null;
+
+  @ApiProperty({ required: false })
+  dietaryRequirements?: string | null;
+
+  @ApiProperty({ required: false })
+  idDocUrl?: string | null;
+
+  @ApiProperty({ required: false })
+  phoneVerified?: boolean;
 }
 
 export class GuestsResponseDto {

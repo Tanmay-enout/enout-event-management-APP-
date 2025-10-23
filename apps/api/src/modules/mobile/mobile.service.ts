@@ -356,12 +356,36 @@ export class MobileService {
     const timestamp = Date.now();
     const finalFileName = `${timestamp}_${safeFileName}`;
 
-    // For now, we'll just store the file name/path - in production you'd upload to S3/Azure/etc.
     const idDocUrl = `/uploads/attendees/${String(attendee.id)}/${finalFileName}`;
+    const uploadDir = `./uploads/attendees/${String(attendee.id)}`;
     
     this.logger.debug(`Generated file URL: ${idDocUrl}`);
 
     try {
+      // ADDED: Import fs for file operations
+      const fs = require('fs').promises;
+      
+      // Create directory if it doesn't exist
+      await fs.mkdir(uploadDir, { recursive: true });
+      
+      // Write file to disk - handle React Native file objects
+      const filePath = `${uploadDir}/${finalFileName}`;
+      
+      // Check if file has buffer (Node.js file) or needs to be read differently (React Native)
+      if (file.buffer) {
+        // Standard Node.js file with buffer
+        await fs.writeFile(filePath, file.buffer);
+      } else if (file.uri || file.path) {
+        // React Native file - read from URI/path
+        const fileData = await fs.readFile(file.uri || file.path);
+        await fs.writeFile(filePath, fileData);
+      } else {
+        // Fallback: try to write the file object directly
+        await fs.writeFile(filePath, file);
+      }
+      
+      this.logger.debug(`File written to: ${filePath}`);
+
       // Update the attendee record with the document URL
       await this.prisma.attendee.update({
         where: { id: attendee.id },
