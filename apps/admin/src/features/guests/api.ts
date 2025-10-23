@@ -3,7 +3,7 @@
  */
 
 import { Guest, PaginatedGuests, InviteRow, GuestFilters } from './types';
-import { env } from '@/lib/env';
+// import { env } from '@/lib/env';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 
 /**

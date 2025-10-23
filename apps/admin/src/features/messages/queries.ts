@@ -36,7 +36,7 @@ export function useCreateMessageMutation(eventId: string) {
 
   return useMutation({
     mutationFn: (message: Partial<MessageType>) => messagesApi.createMessage(eventId, message),
-    onSuccess: (newMessage) => {
+    onSuccess: (_newMessage) => {
       // Invalidate and refetch messages list
       queryClient.invalidateQueries({ queryKey: messageKeys.lists() });
       

@@ -7,7 +7,11 @@ import {
   Delete,
   Put,
   Query,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { MessagesService } from './messages.service';
 import { MessageDto, MessagesResponseDto } from './dto/message.dto';
@@ -112,6 +116,32 @@ export class MessagesController {
   ): Promise<MessageDto> {
     const message = await this.messagesService.sendMessage(eventId, id);
     return this.transformToDto(message);
+  }
+
+  @Post(':id/upload-attachments')
+  @UseInterceptors(FileInterceptor('file', {
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    fileFilter: (req, file, callback) => {
+      const allowed = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'doc', 'docx', 'xls', 'xlsx'];
+      const ext = file.originalname.split('.').pop()?.toLowerCase() || '';
+      if (allowed.includes(ext)) {
+        callback(null, true);
+      } else {
+        callback(new BadRequestException('File type not allowed'), false);
+      }
+    }
+  }))
+  @ApiOperation({ summary: 'Upload attachment to a message' })
+  @ApiResponse({ status: 200, description: 'File uploaded successfully' })
+  async uploadAttachment(
+    @Param('eventId') eventId: string,
+    @Param('id') messageId: string,
+    @UploadedFile() file: any
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+    return this.messagesService.uploadAttachment(eventId, messageId, file);
   }
 
   private transformToDto(message: any): MessageDto {

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+// import { api } from '@/lib/api';
 
 export interface RoomFilters {
   status: string[];
@@ -246,7 +246,7 @@ export function useAddRoom() {
       
       return mockRoom;
     },
-    onSuccess: (_, { eventId }) => {
+    onSuccess: (_, { eventId: _eventId }) => {
       queryClient.invalidateQueries({ queryKey: roomKeys.lists() });
     },
   });

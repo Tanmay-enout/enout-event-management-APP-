@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, usePathname } from 'next/navigation';
-import { Search, Plus, User, Calendar, Trash2, MoreHorizontal } from 'lucide-react';
+import { Search, Plus, User, Calendar, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { CreateEventModal } from './CreateEventModal';
 import { cn } from '@/lib/utils';
@@ -102,7 +102,7 @@ function EventListItem({
       {showDeleteConfirm && (
         <div className="absolute inset-0 bg-white border border-red-200 rounded-lg p-3 shadow-lg z-10">
           <div className="text-sm text-gray-900 mb-2">
-            Delete "{event.name}"?
+            Delete &quot;{event.name}&quot;?
           </div>
           <div className="text-xs text-gray-500 mb-3">
             This action cannot be undone.
@@ -135,7 +135,7 @@ export function DrawerEventList() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [localEvents, setLocalEvents] = useState<EventType[]>([]);
   
-  const { selectedEventId, setSelectedEventId, setSelectedEvent } = useEventStore();
+  const { selectedEventId: _selectedEventId, setSelectedEventId, setSelectedEvent } = useEventStore();
 
   const { data: events = [], isLoading, error } = useQuery({
     queryKey: ['events'],

@@ -2,7 +2,7 @@
 
 import { Edit } from 'lucide-react';
 import { Guest } from '../types';
-import { useCan } from '@/lib/useCan';
+// import { useCan } from '@/lib/useCan';
 
 interface RowActionsProps {
   guest: Guest;
@@ -18,12 +18,12 @@ interface RowActionsProps {
 
 export function RowActions({
   guest,
-  onSendInvite,
-  onResendInvite,
-  onDelete,
-  canDelete,
-  canEdit,
-  canSendInvites,
+  onSendInvite: _onSendInvite,
+  onResendInvite: _onResendInvite,
+  onDelete: _onDelete,
+  canDelete: _canDelete,
+  canEdit: _canEdit,
+  canSendInvites: _canSendInvites,
   isLoading,
   onEdit,
 }: RowActionsProps) {

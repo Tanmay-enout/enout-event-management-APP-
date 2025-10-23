@@ -399,7 +399,6 @@ export class MobileService {
         startDate: true,
         endDate: true,
         location: true,
-        imageUrl: true,
         timezone: true,
         status: true,
       },
@@ -415,9 +414,9 @@ export class MobileService {
       startDate: event.startDate,
       endDate: event.endDate,
       location: event.location,
-      imageUrl: event.imageUrl,
       timezone: event.timezone,
       status: event.status,
     };
   }
+
 }

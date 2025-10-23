@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -184,7 +184,12 @@ export function RoomGrid({ eventId }: RoomGridProps) {
 
   const { data: attendees = [], isLoading: attendeesLoading } = useQuery({
     queryKey: ['attendees', eventId],
-    queryFn: () => api.getAttendees(eventId),
+    queryFn: async () => {
+      const response = await fetch(`http://localhost:3003/api/events/${eventId}/invites?page=1&pageSize=100`);
+      if (!response.ok) throw new Error('Failed to fetch guests');
+      const data = await response.json();
+      return data.data || [];
+    },
   });
 
   // Handle both new and old room data formats

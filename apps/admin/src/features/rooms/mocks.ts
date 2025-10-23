@@ -1,8 +1,8 @@
 import { http, HttpResponse } from 'msw';
-import { Room, RoomsResponse, AttendeeLite, RoomAssignmentResponse, AddRoomRequest, AssignRoomRequest, ClearAssignmentRequest } from './api';
+import { Room, RoomsResponse, AttendeeLite, RoomAssignmentResponse, AddRoomRequest, ClearAssignmentRequest } from './api';
 
 // Mock data - Enhanced rooms with realistic names and assignments
-let mockRooms: Room[] = [
+const mockRooms: Room[] = [
   {
     id: 'room-1',
     eventId: 'event-1',
@@ -138,10 +138,11 @@ function filterRooms(rooms: Room[], filters: URLSearchParams): Room[] {
       case 'room-desc':
         filtered.sort((a, b) => b.roomNo.localeCompare(a.roomNo));
         break;
-      case 'status':
+      case 'status': {
         const statusOrder = { 'empty': 0, 'partial': 1, 'full': 2 };
         filtered.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
         break;
+      }
       case 'newest':
       default:
         // Keep original order (newest first)
@@ -246,7 +247,7 @@ export const roomsHandlers = [
       // For ALL events (both mock and dynamic), fetch from the actual guest list
       try {
         // Import the guest API and mock DB directly to ensure consistency
-        const { guestsApi } = await import('@/features/guests/api');
+        // const { guestsApi } = await import('@/features/guests/api');
         const { getMockDB } = await import('@/mocks/persistence');
         
         // Use the same approach as the guest list - direct mock DB access

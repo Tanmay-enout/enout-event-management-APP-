@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
 import { api } from '@/lib/api';
-import { format, startOfWeek, endOfWeek, addDays, isSameDay, addWeeks, subWeeks, startOfDay, endOfDay, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isSameMonth, isToday } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addDays, isSameDay, addWeeks, subWeeks, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isSameMonth, isToday } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { AddEventModal } from './AddEventModal';
 import { toast } from '@/hooks/use-toast';
@@ -18,7 +18,7 @@ type ViewMode = 'week' | 'day' | 'month';
 // Event Item Component with delete functionality
 const EventItem = React.memo(function EventItem({ 
   event, 
-  eventId, 
+  eventId: _eventId, 
   onDelete 
 }: { 
   event: any; 
@@ -385,17 +385,17 @@ export function CalendarBoard({ eventId }: CalendarBoardProps) {
 
   // Memoize expensive date calculations
   const weekStart = useMemo(() => startOfWeek(currentDate, { weekStartsOn: 1 }), [currentDate]);
-  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
-  const timeSlots = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
+  const _weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
+  const _timeSlots = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
 
   // Memoize event filtering functions
-  const getEventsForDay = useCallback((date: Date) => {
+  const _getEventsForDay = useCallback((date: Date) => {
     return schedule.filter(item => 
       isSameDay(new Date(item.startTime), date)
     );
   }, [schedule]);
 
-  const getEventsForTimeSlot = useCallback((date: Date, hour: number) => {
+  const _getEventsForTimeSlot = useCallback((date: Date, hour: number) => {
     return schedule.filter(item => {
       const eventStart = new Date(item.startTime);
       const eventEnd = new Date(item.endTime);

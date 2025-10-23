@@ -39,7 +39,7 @@ const countryOptions = [
 ];
 
 export function EditGuestDialog({ isOpen, onClose, guest, eventId }: EditGuestDialogProps) {
-  const [isLoading, setIsLoading] = useState(false);
+  const [_isLoading, _setIsLoading] = useState(false);
   const queryClient = useQueryClient();
 
   const {

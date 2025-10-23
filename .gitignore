@@ -128,6 +128,10 @@ ios/Pods/
 *.tmp
 *.temp
 
+# Uploaded files
+/apps/api/uploads/
+/apps/api/uploads/**
+
 # Lock files (keep pnpm-lock.yaml but ignore others)
 package-lock.json
 yarn.lock

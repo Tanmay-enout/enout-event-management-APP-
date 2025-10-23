@@ -8,7 +8,7 @@ interface EventHeaderBarProps {
   eventId: string;
 }
 
-export function EventHeaderBar({ eventId }: EventHeaderBarProps) {
+export function EventHeaderBar({ eventId: _eventId }: EventHeaderBarProps) {
   const { selectedEvent } = useEventStore();
 
   if (!selectedEvent) {

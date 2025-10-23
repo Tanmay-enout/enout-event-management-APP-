@@ -1,6 +1,7 @@
 'use client';
 
 import { Providers } from '../providers';
+import { AuthGuard } from '@/components/AuthGuard';
 import { DashboardLayout } from '@/components/DashboardLayout';
 
 export default function Layout({
@@ -10,7 +11,9 @@ export default function Layout({
 }) {
   return (
     <Providers>
-      <DashboardLayout>{children}</DashboardLayout>
+      <AuthGuard>
+        <DashboardLayout>{children}</DashboardLayout>
+      </AuthGuard>
     </Providers>
   );
 }

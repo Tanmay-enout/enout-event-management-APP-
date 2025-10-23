@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { RoomTable } from '@/components/rooms/RoomTable';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Room } from '@/features/rooms/api';
+import { Room, AttendeeLite } from '@/features/rooms/api';
 
 export default function RoomsPage({ params }: { params: { id: string } }) {
   const queryClient = useQueryClient();
@@ -45,15 +45,23 @@ export default function RoomsPage({ params }: { params: { id: string } }) {
   const { data: allGuests = [], isLoading: attendeesLoading } = useQuery({
     queryKey: ['guests', params.id, { all: true }],
     queryFn: async () => {
-      const response = await fetch(`http://localhost:3006/api/events/${params.id}/invites?page=1&pageSize=100`);
+      const response = await fetch(`http://localhost:3003/api/events/${params.id}/invites?page=1&pageSize=100`);
       if (!response.ok) throw new Error('Failed to fetch guests');
       const data = await response.json();
       return data.data || [];
     },
   });
 
-  // Use all guests for room assignment (same as guest list)
-  const eligibleAttendees = Array.isArray(allGuests) ? allGuests : [];
+  // Transform guests to AttendeeLite format for room assignment
+  const eligibleAttendees: AttendeeLite[] = Array.isArray(allGuests) ? allGuests.map((guest: any) => ({
+    id: guest.id,
+    eventId: guest.eventId,
+    firstName: guest.firstName || '',
+    lastName: guest.lastName || '',
+    email: guest.email,
+    status: guest.derivedStatus === 'accepted' ? 'accepted' : 'registered',
+    assigned: null, // Will be populated by room assignment logic
+  })) : [];
 
   return (
     <RoomTable

@@ -6,3 +6,4 @@ export const MobileUser = createParamDecorator(
     return request.user; // This will be the attendee object from MobileJwtStrategy
   },
 );
+

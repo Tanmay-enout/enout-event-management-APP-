@@ -26,7 +26,7 @@ export class ApiClientError extends Error {
  */
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('admin_token');
+  return localStorage.getItem('admin_auth_token');
 }
 
 /**
@@ -128,6 +128,15 @@ export const apiClient = {
     } catch (error) {
       clearTimeout(timeoutId);
       console.error('API Client: Request failed', error);
+      
+      // Handle 401 unauthorized responses
+      if (error instanceof ApiClientError && error.status === 401) {
+        localStorage.removeItem('admin_auth_token');
+        localStorage.removeItem('admin_refresh_token');
+        localStorage.removeItem('admin_email');
+        window.location.href = '/login';
+      }
+      
       throw error;
     }
   },
@@ -198,6 +207,14 @@ export const apiClient = {
         errorData = { message: response.statusText };
       }
       
+      // Handle 401 unauthorized responses
+      if (response.status === 401) {
+        localStorage.removeItem('admin_auth_token');
+        localStorage.removeItem('admin_refresh_token');
+        localStorage.removeItem('admin_email');
+        window.location.href = '/login';
+      }
+      
       throw new ApiClientError(
         errorData.message || `HTTP ${response.status}`,
         response.status,
@@ -233,6 +250,14 @@ export const apiClient = {
         errorData = await response.json();
       } catch {
         errorData = { message: response.statusText };
+      }
+      
+      // Handle 401 unauthorized responses
+      if (response.status === 401) {
+        localStorage.removeItem('admin_auth_token');
+        localStorage.removeItem('admin_refresh_token');
+        localStorage.removeItem('admin_email');
+        window.location.href = '/login';
       }
       
       throw new ApiClientError(

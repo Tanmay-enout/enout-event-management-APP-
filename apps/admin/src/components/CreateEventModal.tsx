@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
-import { api, calculateEventStatus } from '@/lib/api';
+import { api } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
 import { EventType } from '@enout/shared';
 

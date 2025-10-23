@@ -221,6 +221,32 @@ export const api = {
     return apiClient.post<void>(`/api/events/${eventId}/rooms/${roomId}/unassign`, { guestId });
   },
 
+  async uploadMessageAttachment(
+    eventId: string,
+    messageId: string,
+    file: File
+  ): Promise<{ success: boolean; fileUrl: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const token = typeof window !== 'undefined' ? localStorage.getItem('admin_auth_token') : null;
+    const headers: HeadersInit = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    
+    const response = await fetch(
+      `${env.apiUrl}/api/events/${eventId}/messages/${messageId}/upload-attachments`,
+      { method: 'POST', headers, body: formData }
+    );
+    
+    if (!response.ok) {
+      throw new Error('File upload failed');
+    }
+    
+    return response.json();
+  },
+
   // User
   async getCurrentUser(): Promise<UserType> {
     return apiClient.get<UserType>('/api/user');

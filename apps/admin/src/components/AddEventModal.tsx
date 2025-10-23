@@ -91,7 +91,7 @@ export function AddEventModal({ isOpen, onClose, selectedDate, selectedHour, eve
       reset();
       onClose();
     },
-    onError: (error) => {
+    onError: (_error) => {
       toast({
         title: 'Error',
         description: 'Failed to create event. Please try again.',

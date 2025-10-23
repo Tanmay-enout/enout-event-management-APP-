@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Send, RotateCcw, Download, Trash2, X } from 'lucide-react';
-import { useCan } from '@/lib/useCan';
+// import { useCan } from '@/lib/useCan';
 
 interface BulkActionsProps {
   selectedCount: number;
@@ -12,11 +12,11 @@ interface BulkActionsProps {
 }
 
 export function BulkActions({ selectedCount, onAction, onClearSelection, isLoading }: BulkActionsProps) {
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [_isDropdownOpen, _setIsDropdownOpen] = useState(false);
   // Temporarily disable permission checks to make buttons functional
-  const canSendInvites = true; // useCan('attendee.invite' as any);
-  const canExport = true; // useCan('attendee.export' as any);
-  const canDelete = true; // useCan('attendee.delete' as any);
+  const _canSendInvites = true; // useCan('attendee.invite' as any);
+  const _canExport = true; // useCan('attendee.export' as any);
+  const _canDelete = true; // useCan('attendee.delete' as any);
 
   const actions = [
     {

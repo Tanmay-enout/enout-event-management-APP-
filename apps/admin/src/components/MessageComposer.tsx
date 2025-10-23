@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Send, Clock, Users, Paperclip, Calendar, Edit } from 'lucide-react';
 import { api } from '@/lib/api';
 // import { MessageType } from '@enout/shared';
@@ -28,13 +28,11 @@ interface MessageComposerProps {
 
 export function MessageComposer({ eventId, editingDraft, onDraftSaved }: MessageComposerProps) {
   const queryClient = useQueryClient();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
 
-  const { data: messages = [] } = useQuery({
-    queryKey: ['messages', eventId],
-    queryFn: () => api.getMessages(eventId),
-  });
+  // Removed message fetching - messages are displayed in SentMessages and DraftMessages components
 
   const {
     register,
@@ -84,7 +82,7 @@ export function MessageComposer({ eventId, editingDraft, onDraftSaved }: Message
         description: 'Your message has been sent successfully.',
       });
       reset();
-      setIsScheduling(false);
+      setIsSubmitting(false);
       clearAttachments();
       onDraftSaved?.();
     },
@@ -122,32 +120,104 @@ export function MessageComposer({ eventId, editingDraft, onDraftSaved }: Message
     },
   });
 
-  const onSubmit = (data: MessageForm) => {
-    const messageData = {
-      ...data,
-      attachments: attachments.map(file => ({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        // In a real app, you'd upload the file and get a URL
-        url: URL.createObjectURL(file)
-      }))
-    };
-    createMessageMutation.mutate(messageData);
+  const onSubmit = async (data: MessageForm) => {
+    try {
+      setIsSubmitting(true);
+      // First create message with empty attachments
+      let messageResponse;
+      if (editingDraft) {
+        messageResponse = await api.updateMessage(eventId, editingDraft.id, {
+          ...data,
+          status: 'sent',
+          attachments: []
+        });
+      } else {
+        messageResponse = await api.createMessage(eventId, {
+          ...data,
+          status: 'sent',
+          attachments: []
+        });
+      }
+      
+      // Then upload attachments if any
+      if (attachments.length > 0) {
+        for (const file of attachments) {
+          try {
+            await api.uploadMessageAttachment(eventId, messageResponse.id, file);
+          } catch (error) {
+            console.error('Failed to upload attachment:', file.name, error);
+            // Continue uploading other files
+          }
+        }
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ['messages', eventId] });
+      toast({
+        title: 'Message sent',
+        description: 'Your message has been sent successfully.',
+      });
+      reset();
+      clearAttachments();
+      onDraftSaved?.();
+    } catch (error) {
+      console.error('Failed to create message:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send message. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const onSaveDraft = (data: MessageForm) => {
-    const messageData = {
-      ...data,
-      attachments: attachments.map(file => ({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        // In a real app, you'd upload the file and get a URL
-        url: URL.createObjectURL(file)
-      }))
-    };
-    saveDraftMutation.mutate(messageData);
+  const onSaveDraft = async (data: MessageForm) => {
+    try {
+      setIsSubmitting(true);
+      // First create/update message with empty attachments
+      let messageResponse;
+      if (editingDraft) {
+        messageResponse = await api.updateMessage(eventId, editingDraft.id, {
+          ...data,
+          status: 'draft',
+          attachments: []
+        });
+      } else {
+        messageResponse = await api.createMessage(eventId, {
+          ...data,
+          status: 'draft',
+          attachments: []
+        });
+      }
+      
+      // Then upload attachments if any
+      if (attachments.length > 0) {
+        for (const file of attachments) {
+          try {
+            await api.uploadMessageAttachment(eventId, messageResponse.id, file);
+          } catch (error) {
+            console.error('Failed to upload attachment:', file.name, error);
+          }
+        }
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ['messages', eventId] });
+      onDraftSaved?.();
+      clearAttachments();
+      toast({
+        title: 'Draft saved',
+        description: 'Your message has been saved as a draft.',
+      });
+    } catch (error) {
+      console.error('Failed to save draft:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to save draft. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -272,21 +342,21 @@ export function MessageComposer({ eventId, editingDraft, onDraftSaved }: Message
           <div className="flex items-center gap-3 pt-4">
             <button
               type="submit"
-              disabled={createMessageMutation.isPending}
+              disabled={isSubmitting}
               className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               <Send className="h-4 w-4" />
-              {createMessageMutation.isPending ? 'Sending...' : 'Send Now'}
+              {isSubmitting ? 'Sending...' : 'Send Now'}
             </button>
             
             <button
               type="button"
               onClick={handleSubmit(onSaveDraft)}
-              disabled={saveDraftMutation.isPending}
+              disabled={isSubmitting}
               className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               <Edit className="h-4 w-4" />
-              {saveDraftMutation.isPending ? 'Saving...' : 'Save Draft'}
+              {isSubmitting ? 'Saving...' : 'Save Draft'}
             </button>
             
             <button
@@ -337,61 +407,7 @@ export function MessageComposer({ eventId, editingDraft, onDraftSaved }: Message
         </div>
       )}
 
-      {/* Message History */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">Message History</h3>
-        
-        {messages.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p>No messages sent yet</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {messages.map((message: any) => (
-              <div key={message.id} className="bg-white border border-gray-200 rounded-2xl p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <h4 className="font-medium text-gray-900">{message.title}</h4>
-                  <div className="flex items-center gap-2">
-                    {message.status === 'scheduled' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
-                        <Clock className="h-3 w-3" />
-                        Scheduled
-                      </span>
-                    )}
-                    {message.status === 'sent' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                        <Send className="h-3 w-3" />
-                        Sent
-                      </span>
-                    )}
-                  </div>
-                </div>
-                
-                <p className="text-gray-600 text-sm mb-3">{message.body}</p>
-                
-                <div className="flex items-center gap-4 text-xs text-gray-500">
-                  <span className="flex items-center gap-1">
-                    <Users className="h-3 w-3" />
-                    {message.audience}
-                  </span>
-                  {message.scheduledFor && (
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {format(new Date(message.scheduledFor), 'MMM d, yyyy h:mm a')}
-                    </span>
-                  )}
-                  {message.sentAt && (
-                    <span>
-                      Sent {format(new Date(message.sentAt), 'MMM d, yyyy h:mm a')}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Message History removed to prevent duplication with SentMessages tab */}
     </div>
   );
 }

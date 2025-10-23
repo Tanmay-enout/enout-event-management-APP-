@@ -17,7 +17,34 @@ export function SentMessages({ eventId }: SentMessagesProps) {
   const { data: messages = [], isLoading, error } = useQuery({
     queryKey: ['messages', eventId],
     queryFn: () => api.getMessages(eventId),
-    select: (data) => data.filter((msg: any) => msg.status === 'sent'),
+    select: (data) => {
+      const sentMessages = data.filter((msg: any) => msg.status === 'sent');
+      
+      // Group messages by title and body to avoid duplication
+      const groupedMessages = new Map();
+      
+      sentMessages.forEach((msg: any) => {
+        const key = `${msg.title}|${msg.body}`;
+        if (!groupedMessages.has(key)) {
+          groupedMessages.set(key, {
+            ...msg,
+            recipientCount: 0,
+            allMessages: []
+          });
+        }
+        
+        const grouped = groupedMessages.get(key);
+        grouped.recipientCount += 1;
+        grouped.allMessages.push(msg);
+        
+        // Use the earliest created date
+        if (new Date(msg.createdAt) < new Date(grouped.createdAt)) {
+          grouped.createdAt = msg.createdAt;
+        }
+      });
+      
+      return Array.from(groupedMessages.values());
+    },
   });
 
   const handleMessageClick = (message: any) => {

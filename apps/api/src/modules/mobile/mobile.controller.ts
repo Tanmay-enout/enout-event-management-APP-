@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Post, Body, Param, HttpCode, Logger, UseGuards, UploadedFile, UseInterceptors, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Body, Param, HttpCode, Logger, UseGuards, UploadedFile, UseInterceptors, Query, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MobileService } from './mobile.service';
@@ -10,7 +10,7 @@ import { MobileUser } from '../auth/decorators/mobile-user.decorator';
 import { Attendee } from '@prisma/client';
 
 @ApiTags('mobile')
-@Controller()
+@Controller('api')
 export class MobileController {
   private readonly logger = new Logger(MobileController.name);
   private readonly TEST_ATTENDEE_ID = 'cmgeqhtvn0001gsqbownyjgmr';
@@ -33,6 +33,7 @@ export class MobileController {
     this.logger.debug(`Getting event details for: ${eventId}`);
     return this.mobileService.getEventDetails(eventId);
   }
+
 
   @Get('/events/:eventId/profile')
   @UseGuards(MobileJwtAuthGuard)

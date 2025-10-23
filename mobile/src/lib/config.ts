@@ -1,6 +1,6 @@
 // API Configuration - supports both localhost and network IP for physical device testing
 export const API_CONFIG = {
-  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://192.168.29.136:3003',
+  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3003',
   // Add timeout and other settings
   TIMEOUT: 10000,
 };
@@ -20,12 +20,12 @@ export const API_ENDPOINTS = {
     VERIFY_PHONE_OTP: '/api/auth/phone/verify-otp',
   },
   MOBILE: {
-    PROFILE: (eventId: string) => `/events/${eventId}/profile`,
-    UPLOAD_DOCUMENT: (eventId: string) => `/events/${eventId}/upload-documents`,
-    MESSAGES: (eventId: string) => `/events/${eventId}/mobile-messages`,
-    MESSAGE_DETAIL: (eventId: string, id: string) => `/events/${eventId}/mobile-messages/${id}`,
-    ACKNOWLEDGE_MESSAGE: (eventId: string, id: string) => `/events/${eventId}/mobile-messages/${id}/acknowledge`,
-    EVENT_DETAILS: (eventId: string) => `/events/${eventId}`,
+    PROFILE: (eventId: string) => `/api/events/${eventId}/profile`,
+    UPLOAD_DOCUMENT: (eventId: string) => `/api/events/${eventId}/upload-documents`,
+    MESSAGES: (eventId: string) => `/api/events/${eventId}/mobile-messages`,
+    MESSAGE_DETAIL: (eventId: string, id: string) => `/api/events/${eventId}/mobile-messages/${id}`,
+    ACKNOWLEDGE_MESSAGE: (eventId: string, id: string) => `/api/events/${eventId}/mobile-messages/${id}/acknowledge`,
+    EVENT_DETAILS: (eventId: string) => `/api/events/${eventId}`,
   },
   EVENTS: {
     LIST: '/api/events',

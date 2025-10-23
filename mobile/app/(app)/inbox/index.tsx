@@ -48,12 +48,12 @@ export default function InboxScreen() {
           body: msg.body || '',
           createdAt: msg.createdAt || '',
           unread: msg.unread || false,
-          attachments: msg.attachments || {},
+          attachments: Array.isArray(msg.attachments) ? msg.attachments : [],
           // Map to display fields
           subject: msg.title || '',
           snippet: msg.body || '',
           sentAt: msg.createdAt ? new Date(msg.createdAt).toLocaleString() : '',
-          attachmentsCount: msg.attachments ? Object.keys(msg.attachments).length : 0,
+          attachmentsCount: Array.isArray(msg.attachments) ? msg.attachments.length : 0,
           sender: 'Event Organizer', // Default sender for now
           avatar: 'E',
         }));

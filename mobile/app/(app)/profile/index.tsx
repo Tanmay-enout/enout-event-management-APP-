@@ -173,40 +173,6 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Clear authentication tokens and user data
-              await storage.removeItem('auth_token');
-              await storage.removeItem('auth_email');
-              await storage.removeItem('user_verified_phone');
-              
-              console.log('User logged out successfully');
-              
-              // Navigate to splash/login screen
-              router.replace('/(public)/email');
-            } catch (error) {
-              console.error('Error during logout:', error);
-              // Still navigate even if storage clear fails
-              router.replace('/(public)/email');
-            }
-          },
-        },
-      ]
-    );
-  };
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -300,9 +266,6 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Logout</Text>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* Bottom Navigation */}
@@ -521,29 +484,6 @@ const styles = StyleSheet.create({
     flex: 2,
     textAlign: 'right',
     letterSpacing: 0.1,
-  },
-  logoutButton: {
-    backgroundColor: '#ef4444',
-    paddingVertical: 18,
-    paddingHorizontal: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginTop: 24,
-    marginHorizontal: 20,
-    shadowColor: '#ef4444',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  logoutButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
   },
   bottomNavigation: {
     flexDirection: 'row',

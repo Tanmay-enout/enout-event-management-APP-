@@ -46,7 +46,12 @@ export function GuestTable({ eventId }: { eventId: string }) {
 
   const { data: attendees = [], isLoading } = useQuery({
     queryKey: ['attendees', eventId],
-    queryFn: () => api.getAttendees(eventId),
+    queryFn: async () => {
+      const response = await fetch(`http://localhost:3003/api/events/${eventId}/invites?page=1&pageSize=100`);
+      if (!response.ok) throw new Error('Failed to fetch guests');
+      const data = await response.json();
+      return data.data || [];
+    },
   });
 
   const columns = [

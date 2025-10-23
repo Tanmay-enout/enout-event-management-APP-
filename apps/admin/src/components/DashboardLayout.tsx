@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Plus, Search, Calendar, Trash2 } from 'lucide-react';
+import { Plus, Search, Calendar, Trash2, LogOut } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useEventStore } from '@/lib/store';
 import { useEvents } from '@/lib/hooks';
 import { CreateEventModal } from './CreateEventModal';
@@ -18,6 +19,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { selectedEventId, selectedEvent, setSelectedEventId, setSelectedEvent } = useEventStore();
   const { events } = useEvents();
+  const { logout, email } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const pathname = usePathname();
@@ -90,7 +92,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     if (event) {
       setSelectedEvent(event);
       // Navigate to the selected event's current tab
-      const currentTab = pathname.split('/').pop() || 'guests';
+      const pathParts = pathname.split('/');
+      const currentTab = pathParts.length >= 4 ? pathParts[3] : 'guests';
       router.push(`/events/${eventId}/${currentTab}`);
     }
   };
@@ -293,12 +296,21 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="p-4 border-t border-gray-200">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-sm font-medium">A</span>
+              <span className="text-white text-sm font-medium">
+                {email?.[0]?.toUpperCase() || 'A'}
+              </span>
             </div>
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">Admin User</p>
+              <p className="text-sm font-medium text-gray-900">{email}</p>
               <p className="text-xs text-gray-500">Admin</p>
             </div>
+            <button
+              onClick={logout}
+              className="p-2 hover:bg-gray-100 rounded-lg"
+              title="Logout"
+            >
+              <LogOut className="h-4 w-4 text-gray-500" />
+            </button>
           </div>
         </div>
       </div>

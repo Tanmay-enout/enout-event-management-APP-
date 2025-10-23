@@ -127,8 +127,8 @@ export class MessagesService {
           );
 
           console.log('Total queued messages created:', inviteMessages.length);
-          // Return the broadcast record for admin panel
-          return broadcast;
+          // Return the first message as a representative
+          return inviteMessages[0];
         }
         
         console.log('Filtered attendees:', attendees.length);
@@ -405,5 +405,48 @@ export class MessagesService {
 
     // Return the first message or create a summary message
     return mobileMessages[0] || message;
+  }
+
+  async uploadAttachment(eventId: string, messageId: string, file: any) {
+    // Verify message exists
+    const message = await this.prisma.mobileMessage.findFirst({
+      where: { id: messageId, eventId }
+    });
+    
+    if (!message) {
+      throw new NotFoundException('Message not found');
+    }
+    
+    // Generate safe filename
+    const originalName = file.originalname || 'file';
+    const safeFileName = originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const timestamp = Date.now();
+    const finalFileName = `${messageId}_${timestamp}_${safeFileName}`;
+    const filePath = `./uploads/messages/${finalFileName}`;
+    
+    // Write file to disk
+    const fs = require('fs').promises;
+    await fs.mkdir('./uploads/messages', { recursive: true });
+    await fs.writeFile(filePath, file.buffer);
+    
+    // Build attachment object
+    const attachment = {
+      name: originalName,
+      size: file.size,
+      type: file.mimetype,
+      url: `${process.env.API_URL || 'http://localhost:3003'}/uploads/messages/${finalFileName}`
+    };
+    
+    // Update message attachments array
+    const currentAttachments = (message.attachments as any) || [];
+    const updatedAttachments = Array.isArray(currentAttachments) ? 
+      [...currentAttachments, attachment] : [attachment];
+    
+    await this.prisma.mobileMessage.update({
+      where: { id: messageId },
+      data: { attachments: updatedAttachments }
+    });
+    
+    return { success: true, fileUrl: attachment.url };
   }
 }
